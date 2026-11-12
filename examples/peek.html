@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AuraPeek</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); background: #000; color: #eee; font: 16px -apple-system, system-ui, sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    section { background: #1c1c1e; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    button, input, select { font: inherit; border-radius: 8px; border: 0; padding: 10px 12px; }
+    button { background: #0a84ff; color: #fff; }
+    button.secondary { background: #3a3a3c; }
+    input[type=text], select { background: #2c2c2e; color: #fff; width: 100%; box-sizing: border-box; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .row > * { flex: 1; }
+    #status { font-size: 14px; color: #8e8e93; margin-left: 8px; }
+    #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; }
+    .cards button { flex: 0 0 auto; min-width: 52px; }
+    [disabled] { opacity: .4; }
+  </style>
+</head>
+<body>
+  <h1>AuraPeek <span id="status">déconnecté</span></h1>
+
+  <section>
+    <button id="connect">Connecter</button>
+    <button id="disconnect" class="secondary" disabled>Déconnecter</button>
+  </section>
+
+  <section>
+    <input id="text" type="text" placeholder="Texte à afficher" value="Bonjour">
+    <div class="row">
+      <select id="zone">
+        <option value="full">Plein écran</option>
+        <option value="top">Haut</option>
+        <option value="mid">Milieu</option>
+        <option value="bot">Bas</option>
+      </select>
+      <select id="color">
+        <option value="#fff">Blanc</option>
+        <option value="red">Rouge</option>
+        <option value="green">Vert</option>
+        <option value="#555">Gris (discret)</option>
+      </select>
+    </div>
+    <div class="row">
+      <button data-needs id="send">Afficher</button>
+      <button data-needs id="clear" class="secondary">Effacer</button>
+    </div>
+    <div class="row cards">
+      <button data-needs data-card="AS" class="secondary">A♠</button>
+      <button data-needs data-card="QH" class="secondary">Q♥</button>
+      <button data-needs data-card="7D" class="secondary">7♦</button>
+      <button data-needs data-card="10C" class="secondary">10♣</button>
+    </div>
+  </section>
+
+  <section>
+    <label>Luminosité <input id="bright" type="range" min="0" max="100" value="60" data-needs style="width:100%"></label>
+    <div class="row">
+      <button data-needs id="rotate" class="secondary">Rotation ↻</button>
+      <button data-needs id="flash" class="secondary">Flash</button>
+      <button data-needs id="ping" class="secondary">Ping</button>
+    </div>
+    <label class="row"><span><input id="feedback" type="checkbox" data-needs> Afficher les touchers (test)</span></label>
+  </section>
+
+  <section>
+    <div id="log"></div>
+  </section>
+
+  <script src="../devices/aura-peek.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const log = (s) => { $('log').textContent = s + '\n' + $('log').textContent; };
+    let peek = null;
+    let rotation = 0;
+
+    const setConnected = (on) => {
+      document.querySelectorAll('[data-needs]').forEach((el) => { el.disabled = !on; });
+      $('connect').disabled = on;
+      $('disconnect').disabled = !on;
+    };
+    setConnected(false);
+    const run = (fn) => async () => { try { await fn(); } catch (e) { log('⚠️ ' + e.message); } };
+
+    $('connect').onclick = run(async () => {
+      peek = new AuraPeek();
+      peek.on('status', ({ state, name }) => {
+        $('status').textContent = state + (name ? ' · ' + name : '');
+        setConnected(state === 'connected');
+      });
+      peek.on('message', (m) => log('← ' + JSON.stringify(m)));
+      peek.on('connect', ({ info }) => {
+        if (info) { $('bright').value = info.bright; rotation = info.rotate; }
+      });
+      await peek.connect();
+    });
+    $('disconnect').onclick = run(() => peek.disconnect());
+
+    $('send').onclick = run(() => peek.text($('text').value, { zone: $('zone').value, color: $('color').value }));
+    $('clear').onclick = run(() => peek.clear());
+    document.querySelectorAll('[data-card]').forEach((b) => {
+      b.onclick = run(() => peek.card(b.dataset.card, { zone: $('zone').value }));
+    });
+    $('bright').onchange = run(() => peek.brightness($('bright').value));
+    $('rotate').onclick = run(() => peek.rotate(rotation = (rotation + 1) % 4));
+    $('flash').onclick = run(() => peek.flash());
+    $('feedback').onchange = run(() => peek.feedback($('feedback').checked));
+    $('ping').onclick = run(async () => log('ping : ' + (await peek.ping()) + ' ms'));
+
+    if (!AuraPeek.isAvailable()) log("Ouvrez cette page dans Aura (HTTPS, domaine en favori).");
+  </script>
+</body>
+</html>
