@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Sensors">Capteurs</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    video, #photo { width: 100%; border-radius: 12px; background: #111; display: block; margin-top: 8px; }
+    #prox { font-size: 48px; text-align: center; padding: 8px; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Sensors">Capteurs</h1>
+
+  <h2 data-en="Environment">Environnement</h2>
+  <div class="ak-card"><pre class="ak-kv" id="env">…</pre></div>
+
+  <h2 data-en="Proximity">Proximité</h2>
+  <div class="ak-card">
+    <div id="prox">✋</div>
+    <button class="ak-btn" id="proxBtn" style="width:100%" data-en="Watch the sensor">Surveiller le capteur</button>
+    <p class="ak-muted" data-en="Cover the top of the screen. The state is also sent to the other iPhone.">Couvrez le haut de l'écran. L'état est aussi envoyé à l'autre iPhone.</p>
+  </div>
+
+  <h2 data-en="Camera">Caméra</h2>
+  <div class="ak-card">
+    <div class="ak-row">
+      <button class="ak-btn" id="cam" data-en="Open">Ouvrir</button>
+      <button class="ak-btn" id="torch" data-en="🔦 Torch">🔦 Flash</button>
+      <button class="ak-btn" id="snap" data-en="📸 Send">📸 Envoyer</button>
+    </div>
+    <video id="video" muted playsinline></video>
+    <img id="photo" hidden alt="">
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const link = AuraKit.link();
+
+    (async () => {
+      const env = await AuraKit.ready();
+      const device = await AuraKit.device();
+      $('env').textContent = JSON.stringify({ available: env.available, appClip: env.appClip, mock: env.mock, frame: env.frame,
+        reason: env.reason || undefined, caps: env.caps, device }, null, 2);
+    })();
+
+    let watcher = null;
+    $('proxBtn').onclick = async () => {
+      if (watcher) { watcher.stop(); watcher = null; $('proxBtn').textContent = t('Surveiller le capteur', 'Watch the sensor'); return; }
+      watcher = await AuraKit.proximity.watch(({ near }) => {
+        $('prox').textContent = near ? '🫥' : '✋';
+        link.send('prox', near);
+      });
+      if (!watcher.supported) { AuraUI.toast(t('Pas de capteur de proximité', 'No proximity sensor')); watcher = null; return; }
+      $('proxBtn').textContent = t('Arrêter', 'Stop');
+    };
+    link.onMessage('prox', (near) => { if (near) { AuraKit.haptics.preset('heartbeat'); AuraUI.toast(t('L\'autre iPhone est couvert', 'The other iPhone is covered')); } });
+
+    let torchOn = false;
+    $('cam').onclick = async () => {
+      try { await AuraKit.camera.open({ facing: 'environment', video: $('video') }); }
+      catch (e) { AuraUI.toast(e.message); }
+    };
+    $('torch').onclick = async () => {
+      try { torchOn = await AuraKit.camera.torch(!torchOn); }
+      catch (e) { AuraUI.toast(e.message); }
+    };
+    $('snap').onclick = async () => {
+      try {
+        const src = await AuraKit.camera.snapshot({ maxSize: 320 });
+        $('photo').src = src; $('photo').hidden = false;
+        if (await link.send('photo', src)) AuraUI.toast(t('Photo envoyée', 'Photo sent'));
+      } catch (e) { AuraUI.toast(e.message); }
+    };
+    link.onMessage('photo', (src) => { $('photo').src = src; $('photo').hidden = false; AuraKit.haptics.success(); });
+  </script>
+</body>
+</html>

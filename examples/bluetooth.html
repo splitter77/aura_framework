@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Bluetooth LE</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <script src="../devices/aura-peeksmith.js"></script>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1>Bluetooth LE</h1>
+  <p class="ak-muted" id="state">…</p>
+
+  <h2 data-en="Nearby devices">Appareils à proximité</h2>
+  <div class="ak-card">
+    <input class="ak-input" id="prefix" placeholder="Préfixe du nom (facultatif)" data-en-placeholder="Name prefix (optional)" autocomplete="off">
+    <p><button class="ak-btn primary" id="scan" style="width:100%" data-en="Scan">Rechercher</button></p>
+    <ul class="ak-list" id="list"></ul>
+  </div>
+
+  <div id="devBox" hidden>
+    <h2 id="devName"></h2>
+    <div class="ak-card">
+      <pre class="ak-kv" id="services"></pre>
+      <p class="ak-muted" data-en="Notifications (first notifiable characteristic):">Notifications (première caractéristique notifiable) :</p>
+      <pre class="ak-kv" id="values">—</pre>
+      <form class="ak-row" id="writeForm">
+        <input class="ak-input" id="writeText" value="hello" autocomplete="off" style="flex:3">
+        <button class="ak-btn" data-en="Write">Écrire</button>
+      </form>
+      <p><button class="ak-btn red" id="disc" style="width:100%" data-en="Disconnect">Déconnecter</button></p>
+    </div>
+  </div>
+
+  <h2>PeekSmith 3</h2>
+  <div class="ak-card">
+    <form class="ak-row" id="psForm">
+      <input class="ak-input" id="psText" value="Q♥" autocomplete="off" style="flex:3">
+      <button class="ak-btn" data-en="Show">Afficher</button>
+    </form>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let stopScan = null, device = null, writable = null;
+
+    AuraKit.ready().then(async (env) => {
+      if (!env.available) { $('state').textContent = env.reason; return; }
+      $('state').textContent = 'Bluetooth : ' + await AuraKit.ble.state();
+    });
+
+    $('scan').onclick = async () => {
+      if (stopScan) { await stopScan(); stopScan = null; $('scan').textContent = t('Rechercher', 'Scan'); return; }
+      $('list').innerHTML = '';
+      const prefix = $('prefix').value.trim();
+      try {
+        // scan(filter, onDevice) → stop(). onDevice gets each advertisement (the same device several times).
+        stopScan = await AuraKit.ble.scan(prefix ? { namePrefix: prefix } : {}, (d, seen) => {
+          $('list').innerHTML = '';
+          [...seen.values()].sort((a, b) => b.rssi - a.rssi).forEach((dev) => {
+            const li = document.createElement('li');
+            li.innerHTML = '<span></span><span class="ak-muted"></span>';
+            li.firstChild.textContent = dev.name || dev.id.slice(0, 8);
+            li.lastChild.textContent = dev.rssi + ' dBm';
+            li.onclick = () => connect(dev);
+            $('list').appendChild(li);
+          });
+        });
+        $('scan').textContent = t('Arrêter', 'Stop');
+      } catch (e) { AuraUI.toast(e.message); }
+    };
+
+    async function connect(dev) {
+      if (stopScan) { await stopScan(); stopScan = null; $('scan').textContent = t('Rechercher', 'Scan'); }
+      try {
+        device = await AuraKit.ble.connect(dev, { autoReconnect: true });
+        device.on('disconnect', () => AuraUI.toast(t('Déconnecté', 'Disconnected')));
+        device.on('reconnect', () => AuraUI.toast(t('Reconnecté', 'Reconnected')));
+        $('devBox').hidden = false;
+        $('devName').textContent = device.name || device.id;
+        $('services').textContent = device.services.map((s) => s.uuid + '\n' + s.characteristics.map((c) => '  ' + c.uuid + '  ' + c.properties.join(' ')).join('\n')).join('\n');
+        writable = null;
+        for (const s of device.services) for (const c of s.characteristics) {
+          if (!writable && c.properties.some((p) => /write/i.test(p))) writable = [s.uuid, c.uuid];
+          if (c.properties.some((p) => /notify|indicate/i.test(p))) {
+            await device.notify(s.uuid, c.uuid, (value) => { $('values').textContent = AuraKit.ble.hex(value) + '   "' + AuraKit.ble.text(value) + '"'; });
+            return;
+          }
+        }
+      } catch (e) { AuraUI.toast(e.message); }
+    }
+
+    $('writeForm').onsubmit = async (e) => {
+      e.preventDefault();
+      if (!device || !writable) return AuraUI.toast(t('Aucune caractéristique inscriptible', 'No writable characteristic'));
+      try { await device.write(writable[0], writable[1], $('writeText').value); AuraUI.toast('OK'); } catch (err) { AuraUI.toast(err.message); }
+    };
+    $('disc').onclick = async () => { if (device) await device.disconnect(); device = null; $('devBox').hidden = true; };
+
+    // Ready-made device libraries live in devices/ (they use window.Aura.bluetooth directly).
+    let ps = null;
+    $('psForm').onsubmit = async (e) => {
+      e.preventDefault();
+      try {
+        if (!ps) ps = await AuraPeekSmith.connect({ lang: AuraI18n.lang });
+        await ps.text($('psText').value);
+      } catch (err) { AuraUI.toast(err.message); ps = null; }
+    };
+  </script>
+</body>
+</html>

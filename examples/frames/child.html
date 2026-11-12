@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="../../aurakit-ui.css">
+  <script src="../../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <!-- No simulator here: the iframe goes through its parent page. -->
+  <script src="../../aurakit.js"></script>
+  <script src="../../aurakit-ui.js"></script>
+  <style>body.ak { padding: 14px; background: #1c1c1e; }</style>
+</head>
+<body class="ak">
+  <b data-en="I am the iframe">Je suis l'iframe</b>
+  <p class="ak-muted"><span data-aura-env></span> · <span data-aura-status></span></p>
+  <div class="ak-big" id="n" style="padding:8px">0</div>
+  <div class="ak-row">
+    <button class="ak-btn primary" id="plus">+1</button>
+    <button class="ak-btn" id="buzz" data-en="Haptic">Haptique</button>
+  </div>
+  <pre class="ak-kv ak-muted" id="info"></pre>
+  <script>
+    const link = AuraKit.link();
+    const counter = link.shared('frame-counter', { n: 0 });
+    counter.subscribe((v) => { document.getElementById('n').textContent = v.n; });
+    document.getElementById('plus').onclick = () => { counter.update((v) => ({ n: v.n + 1 })); AuraKit.haptics.tap(); };
+    document.getElementById('buzz').onclick = () => AuraKit.haptics.preset('heartbeat');
+    AuraKit.ready().then(async (env) => {
+      document.getElementById('info').textContent = 'proxied: ' + !!env.proxied + '\ndevice: ' + JSON.stringify(await AuraKit.device());
+    });
+  </script>
+</body>
+</html>

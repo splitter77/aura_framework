@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Haptics">Haptique</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Haptics">Haptique</h1>
+  <label class="ak-card ak-row" style="display:flex">
+    <span data-en="Play on the other iPhone">Jouer sur l'autre iPhone</span>
+    <input type="checkbox" id="remote" style="flex:none;width:24px;height:24px">
+  </label>
+  <p class="ak-muted"><span data-aura-status></span></p>
+
+  <h2>Impacts</h2>
+  <div class="ak-grid" id="impacts"></div>
+  <h2>Notifications</h2>
+  <div class="ak-grid" id="notifs"></div>
+  <h2 data-en="Presets">Motifs</h2>
+  <div class="ak-grid" id="presets"></div>
+  <h2 data-en="Continuous buzz">Vibration continue</h2>
+  <div class="ak-card">
+    <input type="range" id="len" min="0.1" max="2" step="0.1" value="0.5" style="width:100%">
+    <button class="ak-btn" id="buzz" style="width:100%"></button>
+  </div>
+  <h2>Morse</h2>
+  <form class="ak-row" id="morseForm">
+    <input class="ak-input" id="morse" value="SOS" autocomplete="off" style="flex:3">
+    <button class="ak-btn primary" data-en="Play">Jouer</button>
+  </form>
+  <p class="ak-muted ak-kv" id="code"></p>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const link = AuraKit.link();
+
+    // Every action is { name, args } on AuraKit.haptics: played here or sent to the other iPhone.
+    function play(name, ...args) {
+      if ($('remote').checked) link.send('haptic', { name, args });
+      else AuraKit.haptics[name](...args);
+    }
+    link.onMessage('haptic', ({ name, args }) => {
+      if (typeof AuraKit.haptics[name] === 'function') AuraKit.haptics[name](...args);
+    });
+
+    const button = (parent, label, fn) => {
+      const b = document.createElement('button');
+      b.className = 'ak-btn';
+      b.textContent = label;
+      b.onclick = fn;
+      $(parent).appendChild(b);
+    };
+    ['light', 'medium', 'heavy', 'soft', 'rigid'].forEach((s) => button('impacts', s, () => play('impact', s)));
+    button('impacts', 'selection', () => play('selection'));
+    ['success', 'warning', 'error'].forEach((s) => button('notifs', s, () => play(s)));
+    Object.keys(AuraKit.haptics.presets).forEach((p) => button('presets', p, () => play('preset', p)));
+
+    const buzzLabel = () => { $('buzz').textContent = t('Vibrer ', 'Buzz ') + $('len').value + ' s'; };
+    $('len').oninput = buzzLabel; buzzLabel();
+    $('buzz').onclick = () => play('buzz', Number($('len').value));
+
+    $('morseForm').onsubmit = (e) => {
+      e.preventDefault();
+      $('code').textContent = AuraKit.haptics.morseCode($('morse').value);
+      play('morse', $('morse').value);
+    };
+  </script>
+</body>
+</html>

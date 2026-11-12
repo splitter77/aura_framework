@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Messages">Messages</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    #msgs { min-height: 120px; max-height: 40vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+    .bubble { max-width: 78%; padding: 8px 12px; border-radius: 18px; background: var(--ak-surface-2); align-self: flex-start; word-break: break-word; }
+    .bubble.me { background: var(--ak-accent); align-self: flex-end; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1>Messages</h1>
+  <span data-aura-status></span>
+
+  <div class="ak-card" id="msgs"></div>
+  <form id="form" class="ak-row">
+    <input class="ak-input" id="text" autocomplete="off" placeholder="Message" style="flex:3">
+    <button class="ak-btn primary" data-aura-needs-peer data-en="Send">Envoyer</button>
+  </form>
+
+  <h2 data-en="On the other iPhone">Sur l'autre iPhone</h2>
+  <div class="ak-grid">
+    <button class="ak-btn" id="buzz" data-aura-needs-peer data-en="📳 Buzz">📳 Vibrer</button>
+    <button class="ak-btn" id="flash" data-aura-needs-peer data-en="⚡ Flash screen">⚡ Flash écran</button>
+    <button class="ak-btn" id="ping" data-aura-needs-peer data-en="⏱ Round trip">⏱ Aller-retour</button>
+    <button class="ak-btn" id="big" data-aura-needs-peer data-en="📦 Send 200 KB">📦 Envoyer 200 Ko</button>
+  </div>
+  <form id="revealForm" class="ak-row" style="margin-top:8px">
+    <input class="ak-input" id="revealText" autocomplete="off" placeholder="Texte à révéler" data-en-placeholder="Text to reveal" style="flex:3">
+    <button class="ak-btn" data-aura-needs-peer data-en="Reveal">Révéler</button>
+  </form>
+
+  <script>
+    const link = AuraKit.link();
+    const $ = (id) => document.getElementById(id);
+    const add = (text, me) => {
+      const b = document.createElement('div');
+      b.className = 'bubble' + (me ? ' me' : '');
+      b.textContent = text;
+      $('msgs').appendChild(b);
+      $('msgs').scrollTop = 1e9;
+    };
+
+    // Typed messages: link.send(type, data) on one side, link.onMessage(type, fn) on the other.
+    $('form').onsubmit = async (e) => {
+      e.preventDefault();
+      const text = $('text').value.trim();
+      if (!text) return;
+      if (await link.send('chat', text)) { add(text, true); $('text').value = ''; }
+    };
+    link.onMessage('chat', (text) => { add(text, false); AuraKit.haptics.selection(); });
+
+    $('buzz').onclick = () => link.send('buzz');
+    link.onMessage('buzz', () => AuraKit.haptics.preset('double'));
+
+    $('flash').onclick = () => link.send('flash');
+    link.onMessage('flash', () => AuraUI.flash());
+
+    $('revealForm').onsubmit = (e) => { e.preventDefault(); link.send('reveal', $('revealText').value); };
+    link.onMessage('reveal', (text) => { AuraUI.reveal(text); AuraKit.haptics.success(); });
+
+    // request / answer: the other iPhone answers, the promise resolves with its answer.
+    link.answer('ping', (sentAt) => sentAt);
+    $('ping').onclick = async () => {
+      try {
+        const t0 = await link.request('ping', performance.now());
+        AuraUI.toast(t('Aller-retour : ', 'Round trip: ') + Math.round(performance.now() - t0) + ' ms');
+      } catch (err) { AuraUI.toast(err.message); }
+    };
+
+    // Messages over 64 KB are split and put back together automatically.
+    $('big').onclick = async () => {
+      const t0 = Date.now();
+      await link.send('big', { text: 'x'.repeat(200000), t0 });
+      AuraUI.toast('200 KB → ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
+    };
+    link.on('progress', ({ received, total }) => AuraUI.toast('📦 ' + received + ' / ' + total));
+    link.onMessage('big', ({ text }) => { add('📦 ' + Math.round(text.length / 1000) + ' KB', false); AuraKit.haptics.success(); });
+
+    link.on('connect', ({ name }) => AuraUI.toast('🤝 ' + (name || '')));
+    link.on('disconnect', () => AuraUI.toast('👋'));
+  </script>
+</body>
+</html>

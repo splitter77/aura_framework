@@ -1,0 +1,103 @@
+/* AuraKit UI — iOS-style dark theme for pages built with AuraKit (optional).
+ * Everything is prefixed with ak-. Change the variables to restyle. */
+:root {
+  --ak-bg: #000;
+  --ak-surface: #1c1c1e;
+  --ak-surface-2: #2c2c2e;
+  --ak-text: #fff;
+  --ak-muted: #8e8e93;
+  --ak-accent: #0a84ff;
+  --ak-green: #30d158;
+  --ak-orange: #ff9f0a;
+  --ak-red: #ff453a;
+  --ak-radius: 14px;
+  --ak-safe-top: env(safe-area-inset-top, 0px);
+  --ak-safe-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--ak-bg); color: var(--ak-text); }
+body.ak {
+  font: 17px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  padding: calc(var(--ak-safe-top) + 12px) 16px calc(var(--ak-safe-bottom) + 24px);
+  -webkit-user-select: none; user-select: none;
+  -webkit-text-size-adjust: 100%;
+}
+.ak h1 { font-size: 32px; font-weight: 700; margin: 8px 0 4px; letter-spacing: -0.5px; }
+.ak h2 { font-size: 13px; font-weight: 400; color: var(--ak-muted); text-transform: uppercase; margin: 24px 4px 8px; letter-spacing: 0.3px; }
+.ak p { margin: 6px 0; }
+.ak a { color: var(--ak-accent); }
+.ak-muted { color: var(--ak-muted); font-size: 15px; }
+
+.ak-card { background: var(--ak-surface); border-radius: var(--ak-radius); padding: 14px 16px; margin: 8px 0; }
+.ak-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ak-row > * { flex: 1 1 0; }
+.ak-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+
+.ak-btn, .ak button.ak-btn {
+  appearance: none; border: 0; border-radius: 12px; padding: 13px 16px; min-height: 48px;
+  background: var(--ak-surface-2); color: var(--ak-text); font: inherit; font-weight: 600; cursor: pointer;
+  transition: transform .08s, opacity .15s;
+}
+.ak-btn:active { transform: scale(0.97); opacity: 0.8; }
+.ak-btn:disabled { opacity: 0.35; pointer-events: none; }
+.ak-btn.primary { background: var(--ak-accent); }
+.ak-btn.green { background: var(--ak-green); color: #000; }
+.ak-btn.red { background: var(--ak-red); }
+.ak-input {
+  appearance: none; width: 100%; border: 0; border-radius: 12px; padding: 13px 14px;
+  background: var(--ak-surface-2); color: var(--ak-text); font: inherit; -webkit-user-select: text; user-select: text;
+}
+.ak-log {
+  font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--ak-muted); white-space: pre-wrap; word-break: break-word;
+  max-height: 240px; overflow: auto; margin: 0; -webkit-user-select: text; user-select: text;
+}
+
+/* Connection pill (AuraUI.bindStatus / data-aura-status) */
+.ak-pill {
+  display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px;
+  background: var(--ak-surface); font-size: 14px; font-weight: 600; max-width: 100%;
+}
+.ak-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ak-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ak-orange); flex: none; }
+.ak-pill[data-state="wait"] .ak-dot { animation: ak-pulse 1.2s infinite; }
+.ak-pill[data-state="ok"] .ak-dot { background: var(--ak-green); }
+.ak-pill[data-state="err"] .ak-dot { background: var(--ak-red); }
+@keyframes ak-pulse { 50% { opacity: 0.25; } }
+
+/* Toast, flash, reveal (AuraUI) */
+.ak-toast {
+  position: fixed; left: 50%; bottom: calc(var(--ak-safe-bottom) + 24px); transform: translate(-50%, 20px);
+  background: rgba(44, 44, 46, 0.96); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: 15px; font-weight: 600;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 1000; max-width: 90vw; text-align: center;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+.ak-toast.on { opacity: 1; transform: translate(-50%, 0); }
+.ak-flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 1001; transition: opacity .35s; }
+.ak-flash.on { opacity: 1; transition: none; }
+.ak-reveal {
+  position: fixed; inset: 0; z-index: 1002; background: #000; display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.ak-reveal[hidden] { display: none; }
+.ak-reveal-text { font: 700 clamp(40px, 16vw, 120px)/1.05 -apple-system, system-ui, sans-serif; text-align: center; color: #fff; word-break: break-word; }
+
+/* Classes set on <html> by aurakit-ui.js */
+.ak-only-aura, .ak-only-connected { display: none !important; }
+html.ak-in-aura .ak-only-aura { display: revert !important; }
+html.ak-connected .ak-only-connected { display: revert !important; }
+html.ak-in-aura .ak-hide-in-aura, html.ak-connected .ak-hide-connected { display: none !important; }
+
+/* Language switch (aurakit-i18n.js: data-set-lang) */
+.ak-lang { display: flex; justify-content: center; gap: 6px; margin: 28px 0 8px; }
+.ak-lang [data-set-lang] { appearance: none; border: 0; background: transparent; color: var(--ak-muted); font: inherit; font-size: 15px; padding: 6px 12px; border-radius: 999px; }
+.ak-lang [data-set-lang][aria-current="true"] { background: var(--ak-surface); color: var(--ak-text); font-weight: 600; }
+
+/* Small extras used by the examples */
+.ak-back { display: inline-block; color: var(--ak-accent); text-decoration: none; font-size: 17px; margin: 4px 0; }
+.ak-big { font: 700 72px/1.1 -apple-system, system-ui, sans-serif; text-align: center; padding: 24px 8px; font-variant-numeric: tabular-nums; }
+.ak-list { list-style: none; margin: 0; padding: 0; }
+.ak-list li { padding: 11px 0; border-bottom: 0.5px solid #38383a; display: flex; justify-content: space-between; gap: 12px; }
+.ak-list li:last-child { border-bottom: 0; }
+.ak-kv { font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; margin: 0; -webkit-user-select: text; user-select: text; }
+.ak-list a { color: var(--ak-text); text-decoration: none; flex: 1; display: flex; justify-content: space-between; }
+.ak-list a::after { content: "›"; color: var(--ak-muted); }

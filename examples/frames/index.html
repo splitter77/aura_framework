@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="AuraKit in an iframe">AuraKit dans une iframe</title>
+  <link rel="stylesheet" href="../../aurakit-ui.css">
+  <script src="../../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../../aurakit-mock.js"></script>
+  <script src="../../aurakit.js"></script>
+  <script src="../../aurakit-ui.js"></script>
+  <style>iframe { width: 100%; height: 360px; border: 0; border-radius: 14px; background: #1c1c1e; display: block; }</style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="../" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="In an iframe">Dans une iframe</h1>
+  <p class="ak-muted" data-en="Aura does not answer iframes. With AuraKit loaded on both pages, the iframe uses Aura and the link through this page, with no extra code.">Aura ne répond pas aux iframes. Avec AuraKit chargé sur les deux pages, l'iframe utilise Aura et la liaison à travers cette page, sans code en plus.</p>
+  <p><span data-aura-status></span></p>
+  <iframe src="child.html"></iframe>
+  <h2 data-en="Parent page">Page parente</h2>
+  <div class="ak-card"><span data-en="Counter seen by the parent:">Compteur vu par la parente :</span> <b id="n">0</b></div>
+  <script>
+    // The parent only has to load aurakit.js. Here it also reads the shared counter the iframe changes.
+    AuraKit.link().shared('frame-counter', { n: 0 }).subscribe((v) => { document.getElementById('n').textContent = v.n; });
+  </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="AuraKit · Examples">AuraKit · Exemples</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+</head>
+<body class="ak">
+  <h1>AuraKit</h1>
+  <p class="ak-muted" data-en="Examples of the framework. Each one is a single short HTML file: open it to see the code.">Exemples du framework. Chacun tient dans un court fichier HTML : ouvrez-le pour voir le code.</p>
+  <div class="ak-card"><span class="ak-muted" data-en="Running in:">Ouvert dans :</span> <b data-aura-env>…</b></div>
+
+  <h2 data-en="One iPhone">Un iPhone</h2>
+  <div class="ak-card">
+    <ul class="ak-list">
+      <li><a href="haptics.html" data-en="📳 Haptics: impacts, presets, Morse">📳 Haptique : impacts, motifs, morse</a></li>
+      <li><a href="sensors.html" data-en="📷 Sensors: proximity, torch, photo, device">📷 Capteurs : proximité, flash, photo, appareil</a></li>
+      <li><a href="bluetooth.html" data-en="🔵 Bluetooth LE: scan, connect, notifications">🔵 Bluetooth LE : recherche, connexion, notifications</a></li>
+    </ul>
+  </div>
+
+  <h2 data-en="Two iPhones (Aura Browser + App Clip)">Deux iPhones (Aura Browser + App Clip)</h2>
+  <div class="ak-card">
+    <ul class="ak-list">
+      <li><a href="counter.html" data-en="🔢 Shared counter (shared state)">🔢 Compteur partagé (état partagé)</a></li>
+      <li><a href="chat.html" data-en="💬 Messages, ping, reveal, big messages">💬 Messages, ping, révélation, gros messages</a></li>
+      <li><a href="card.html" data-en="🃏 Card: the performer picks, the spectator sees">🃏 Carte : l'artiste choisit, le spectateur voit</a></li>
+      <li><a href="frames/" data-en="🪟 AuraKit inside an iframe">🪟 AuraKit dans une iframe</a></li>
+    </ul>
+  </div>
+
+  <h2 data-en="Templates">Modèles</h2>
+  <div class="ak-card">
+    <ul class="ak-list">
+      <li><a href="../templates/starter/" data-en="Starter page (one iPhone)">Page de départ (un iPhone)</a></li>
+      <li><a href="../templates/two-iphones/" data-en="Two-iPhone page (performer / spectator)">Page deux iPhones (artiste / spectateur)</a></li>
+    </ul>
+  </div>
+
+  <p class="ak-muted" data-en-html="On a computer: open two tabs, <code>?mock=host</code> and <code>?mock=join</code>.">Sur ordinateur : ouvrez deux onglets, <code>?mock=host</code> et <code>?mock=join</code>.</p>
+  <nav class="ak-lang"><button data-set-lang="fr">Français</button><button data-set-lang="en">English</button></nav>
+
+  <script>
+    // Keep ?mock=… (and the other options) when opening an example.
+    document.querySelectorAll('a[href]').forEach((a) => { a.href = a.getAttribute('href') + location.search; });
+  </script>
+</body>
+</html>

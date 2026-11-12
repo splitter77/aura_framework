@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  AuraKit starter page (one iPhone).
+  Copy this folder, then fix the paths below so they point to your copy of the AuraKit files.
+  Serve it over HTTPS on a domain that is in your Aura bookmarks (or that your App Clip link opens).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>My Aura page</title>
+  <link rel="stylesheet" href="../../aurakit-ui.css">
+  <script src="../../aurakit-mock.js"></script>   <!-- desktop simulator, only active with ?mock=host -->
+  <script src="../../aurakit.js"></script>
+  <script src="../../aurakit-ui.js"></script>
+</head>
+<body class="ak">
+  <h1>My Aura page</h1>
+  <p class="ak-muted">Running in: <b data-aura-env>…</b></p>
+
+  <!-- Shown only outside Aura -->
+  <div class="ak-card ak-hide-in-aura">
+    Open this page in <b>Aura Browser</b> or the <b>AuraClip</b> App Clip to use haptics, Bluetooth and the other native features.
+  </div>
+
+  <div class="ak-card">
+    <button class="ak-btn primary" id="tap" style="width:100%">Tap me</button>
+  </div>
+  <div class="ak-card">
+    <pre class="ak-kv" id="device">…</pre>
+  </div>
+
+  <script>
+    document.getElementById('tap').onclick = () => {
+      AuraKit.haptics.success();
+      AuraUI.toast('Hello from Aura 👋');
+    };
+
+    AuraKit.ready().then(async (env) => {
+      if (!env.available) {
+        document.getElementById('device').textContent = env.reason;
+        return;
+      }
+      const device = await AuraKit.device();
+      document.getElementById('device').textContent = JSON.stringify(device, null, 2);
+    });
+  </script>
+</body>
+</html>

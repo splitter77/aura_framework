@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Shared counter">Compteur partagé</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Shared counter">Compteur partagé</h1>
+  <span data-aura-status></span>
+  <p class="ak-muted" data-en="Same number on both iPhones. Either one can change it.">Le même nombre sur les deux iPhones. Les deux peuvent le changer.</p>
+
+  <div class="ak-card ak-big" id="value">0</div>
+  <div class="ak-row">
+    <button class="ak-btn" id="minus">−</button>
+    <button class="ak-btn primary" id="plus">+</button>
+  </div>
+  <p><button class="ak-btn" id="reset" style="width:100%" data-en="Reset">Remettre à zéro</button></p>
+
+  <script>
+    const link = AuraKit.link();
+    // shared(name, initial): same value on both iPhones. On connect, the guest takes the host's value.
+    const counter = link.shared('counter', { n: 0 });
+
+    counter.subscribe((v, { local }) => {
+      document.getElementById('value').textContent = v.n;
+      if (!local) AuraKit.haptics.tap('light');      // changed on the other iPhone
+    });
+
+    document.getElementById('plus').onclick = () => { counter.update((v) => ({ n: v.n + 1 })); AuraKit.haptics.tap(); };
+    document.getElementById('minus').onclick = () => { counter.update((v) => ({ n: v.n - 1 })); AuraKit.haptics.tap(); };
+    document.getElementById('reset').onclick = () => { counter.set({ n: 0 }); AuraKit.haptics.warning(); };
+  </script>
+</body>
+</html>

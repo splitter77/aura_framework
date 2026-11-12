@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Card">Carte</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    #cards { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; }
+    #cards button { appearance: none; border: 0; border-radius: 5px; background: #fff; color: #000; font: 600 12px -apple-system, system-ui; padding: 8px 0; }
+    #cards button.red { color: #d00; }
+    #shown { font-size: 120px; text-align: center; background: #fff; color: #000; border-radius: 18px; padding: 20px 0; margin: 12px 0; min-height: 180px; }
+    #shown.red { color: #d00; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Card">Carte</h1>
+  <span data-aura-status></span> <span class="ak-muted">· <span data-aura-role></span></span>
+  <p class="ak-muted" data-en="Pick a card on one iPhone: it appears on the other one. A guest that connects late still gets the last card.">Choisissez une carte sur un iPhone : elle apparaît sur l'autre. Un invité qui se connecte plus tard reçoit quand même la dernière carte.</p>
+  <div id="shown">🂠</div>
+  <div id="cards"></div>
+
+  <script>
+    const link = AuraKit.link();
+    const suits = ['♠', '♥', '♦', '♣'];
+    const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const isRed = (c) => /[♥♦]/.test(c);
+    let last = null;
+
+    const show = (card) => {
+      last = card;
+      const el = document.getElementById('shown');
+      el.textContent = card;
+      el.className = isRed(card) ? 'red' : '';
+    };
+
+    suits.forEach((s) => values.forEach((v) => {
+      const b = document.createElement('button');
+      b.textContent = v + s;
+      if (isRed(s)) b.className = 'red';
+      b.onclick = () => { show(v + s); link.send('card', v + s); AuraKit.haptics.tap('light'); };
+      document.getElementById('cards').appendChild(b);
+    }));
+
+    link.onMessage('card', (card) => { show(card); AuraKit.haptics.preset('double'); });
+
+    // onSync: runs when the link connects. The host sends what the guest missed.
+    link.onSync(() => { if (link.isHost && last) link.send('card', last); });
+  </script>
+</body>
+</html>

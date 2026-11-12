@@ -1,0 +1,86 @@
+<!doctype html>
+<!--
+  AuraKit two-iPhone page: the performer (Aura Browser) and the spectator (App Clip) are linked over Bluetooth.
+  Copy this folder, fix the paths below, serve it over HTTPS and set it as the destination of your App Clip link.
+  Desktop test: two tabs, ?mock=host and ?mock=join.
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Two iPhones">Deux iPhones</title>
+  <link rel="stylesheet" href="../../aurakit-ui.css">
+  <script src="../../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../../aurakit-mock.js"></script>
+  <script src="../../aurakit.js"></script>
+  <script src="../../aurakit-ui.js"></script>
+</head>
+<body class="ak">
+  <div class="ak-row" style="justify-content:space-between">
+    <span data-aura-status style="flex:none"></span>
+    <span class="ak-muted" style="flex:none;text-align:right" data-aura-role></span>
+  </div>
+
+  <!-- Performer (host, Aura Browser) -->
+  <section id="performer" hidden>
+    <h1 data-en="Performer">Artiste</h1>
+    <p class="ak-muted" data-en="Type a word: it appears full screen on the spectator's iPhone.">Tapez un mot : il apparaît en plein écran sur l'iPhone du spectateur.</p>
+    <form class="ak-row" id="wordForm">
+      <input class="ak-input" id="word" autocomplete="off" placeholder="Mot" data-en-placeholder="Word" style="flex:3">
+      <button class="ak-btn primary" data-aura-needs-peer data-en="Send">Envoyer</button>
+    </form>
+    <div class="ak-card">
+      <span data-en="Spectator touched the screen:">Le spectateur a touché l'écran :</span> <b id="touches">0</b>
+    </div>
+  </section>
+
+  <!-- Spectator (guest, App Clip) -->
+  <section id="spectator" hidden>
+    <h1 data-en="Think of a word…">Pensez à un mot…</h1>
+    <div class="ak-card ak-big" id="touchZone" style="font-size:40px;padding:60px 8px" data-en="Touch here">Touchez ici</div>
+  </section>
+
+  <h2 data-en="Link">Liaison</h2>
+  <div class="ak-card">
+    <form class="ak-row" data-aura-room>
+      <input class="ak-input" placeholder="Code de salon (facultatif)" data-en-placeholder="Room code (optional)" autocomplete="off" style="flex:3">
+      <button class="ak-btn" data-en="OK">OK</button>
+    </form>
+    <pre class="ak-log" data-aura-log style="margin-top:10px"></pre>
+  </div>
+  <nav class="ak-lang"><button data-set-lang="fr">Français</button><button data-set-lang="en">English</button></nav>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    // 1. The link: Aura Browser hosts, the App Clip joins, both pair through your App Clip link and reconnect by themselves.
+    const link = AuraKit.link({ debug: true });
+
+    // 2. Each side shows its own screen once the role is known.
+    link.on('status', () => {
+      $('performer').hidden = !link.isHost;
+      $('spectator').hidden = !link.isGuest;
+    });
+
+    // 3. State both iPhones share: a guest connecting late gets the host's value.
+    const touches = link.shared('touches', 0);
+    touches.subscribe((n, { local }) => {
+      $('touches').textContent = n;
+      if (!local && link.isHost) AuraKit.haptics.tap('heavy');
+    });
+    $('touchZone').onclick = () => { touches.update((n) => n + 1); AuraKit.haptics.selection(); };
+
+    // 4. One-off messages.
+    $('wordForm').onsubmit = (e) => {
+      e.preventDefault();
+      link.send('reveal', $('word').value.trim());
+      $('word').value = '';
+    };
+    link.onMessage('reveal', (word) => { AuraUI.reveal(word); AuraKit.haptics.preset('double'); });
+
+    // 5. Connection feedback.
+    link.on('connect', ({ name }) => { AuraUI.toast('🤝 ' + (name || '')); AuraKit.haptics.success(); });
+    link.on('disconnect', () => { AuraUI.toast('👋'); AuraKit.haptics.warning(); });
+  </script>
+</body>
+</html>
