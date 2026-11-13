@@ -9,6 +9,7 @@
  *   AuraKit.proximity     proximity sensor
  *   AuraKit.camera        camera, torch, snapshots
  *   AuraKit.device()      device identifiers
+ *   AuraKit.quitAppClip() closes the App Clip
  *   iframes               pages inside an iframe get the same API through their parent page
  *
  * Reference: docs/API.md. */
@@ -965,6 +966,20 @@
     return mainLink;
   }
 
+  // ------------------------------------------------------------------ Quitting the App Clip
+  // iOS gives an App Clip no way to close itself. This relies on a crash in the native bridge: Aura.peer.join
+  // converts its timeout to nanoseconds without a bound, so an oversized value overflows and iOS kills the
+  // App Clip. If the bridge ever bounds that value, the call settles and the promise rejects instead.
+  var QUIT_TIMEOUT = 1e300;
+  async function quitAppClip() {
+    await ready();
+    if (!env.available) throw new Error('Aura is not available on this page.');
+    if (!env.appClip) throw new Error('quitAppClip() only works in the AuraClip App Clip.');
+    if (mode !== 'native') throw new Error('quitAppClip() must be called from the main page, not from an iframe.');
+    try { await callNative('peer.join', [{ room: '~quit-' + uid(), timeout: QUIT_TIMEOUT }]); } catch (e) { /* see below */ }
+    throw new Error('The App Clip did not quit (check that Bluetooth is on and allowed).');
+  }
+
   // ------------------------------------------------------------------ Public API
   var AuraKit = {
     version: VERSION,
@@ -986,6 +1001,8 @@
     camera: camera,
     ble: ble,
     link: link,
+    /** App Clip only: closes the App Clip. Never resolves when it works; rejects otherwise. */
+    quitAppClip: quitAppClip,
     frames: {
       /** Parent page: lets frames from these origins use Aura (same origin is always allowed). */
       allow: frameHost.allow,

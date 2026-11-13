@@ -57,6 +57,16 @@ Shortcuts, filled once `ready()` has resolved: `AuraKit.env`, `AuraKit.available
 
 You never have to wait for `ready()` before calling the rest of the API: every function waits for it internally.
 
+### Quitting the App Clip: `AuraKit.quitAppClip()`
+
+```js
+quitButton.onclick = () => AuraKit.quitAppClip().catch((e) => alert(e.message));
+```
+
+Closes the App Clip. iOS gives App Clips no official way to close themselves, so this relies on a crash in the native bridge: `Aura.peer.join()` converts its `timeout` to nanoseconds without a bound, and an oversized value overflows. When it works the promise never settles, because the App Clip is gone.
+
+It rejects when the page is not in the App Clip (Aura Browser, plain browser), when it is called from an iframe, or when the App Clip is still running afterwards: Bluetooth must be on and allowed, otherwise `peer.join` fails before reaching the overflow. If a future version of Aura bounds the timeout, the call rejects instead of quitting.
+
 ## 3. Haptics: `AuraKit.haptics`
 
 ```js
@@ -376,6 +386,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Proximity: press **P** to cover / uncover the sensor while it is watched.
 - Bluetooth: one device, **Mock Sensor** (`id` `MOCK-BLE-0001`, service `FFE0`, characteristic `FFE1`: read returns the last value written, notifications send a counter every second).
 - `deviceInfo()` returns fake identifiers.
+- `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
 
 The tabs share `localStorage`: a room code saved in one tab is used by the other one after a reload.
 

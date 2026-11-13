@@ -90,6 +90,19 @@
     return Uint8Array.from(v || []);
   };
 
+  // Simulates iOS killing the app: the peer leaves and the page is replaced by a notice.
+  var crash = function () {
+    log('peer.join timeout overflow: the app is killed (simulated)');
+    bc.postMessage({ type: 'bye', from: me });
+    peers.clear(); role = null; joinResolve = null; hostId = null;
+    setTimeout(function () {
+      document.title = 'Aura (closed)';
+      document.body.innerHTML = '<p style="font:16px -apple-system,system-ui,sans-serif;text-align:center;margin-top:40vh;color:#888">' +
+        (appClip ? 'App Clip closed' : 'Aura Browser closed') + ' (simulator)</p>';
+    }, 50);
+    return new Promise(function () {});
+  };
+
   var Aura = {
     __mock: true,
     version: 1,
@@ -146,6 +159,8 @@
       },
       join: function (o) {
         o = o || {};
+        // Same overflow as the native bridge: a timeout too large for Int64 nanoseconds kills the app.
+        if (typeof o.timeout === 'number' && !(o.timeout * 1e9 < 9223372036854775807)) return crash();
         return new Promise(function (resolve, reject) {
           role = 'guest'; myName = o.name || null; myRoom = norm(o.room); joinResolve = resolve;
           var timeout = (o.timeout || 30) * 1000, t0 = Date.now();
