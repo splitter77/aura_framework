@@ -22,7 +22,7 @@ Optional add-ons:
 | `aurakit-ui.css` + `aurakit-ui.js` | iOS-style dark theme, connection pill, link log, room code form, toast, screen flash, full-screen reveal, all usable with plain HTML attributes. |
 | `aurakit-i18n.js` | Translate a page with HTML attributes (`data-en="…"`), language switch, `t('Bonjour', 'Hello')` in JavaScript. |
 | `aurakit-mock.js` | Desktop simulator of `window.Aura`: test two iPhones with two browser tabs. |
-| `devices/` | Ready-made drivers for the Electricks **Atom 2** and **PeekSmith 3**. |
+| `devices/` | Ready-made drivers for the Electricks **Atom 2** and **PeekSmith 3**, the AuraPeek and the **Nova Pen**. |
 
 ## Quick start
 
@@ -107,7 +107,7 @@ aurakit-mock.js     Desktop simulator (only with ?mock=…, never inside Aura)
 aurakit-ui.css      iOS-style dark theme (optional)
 aurakit-ui.js       UI helpers and HTML attributes (optional)
 aurakit-i18n.js     Translations (optional)
-devices/            Electricks Atom 2 and PeekSmith 3 drivers (optional)
+devices/            Atom 2, PeekSmith 3, AuraPeek and Nova Pen drivers (optional)
 examples/           One short HTML file per feature
 templates/          Pages to copy and start from
 docs/API.md         Full reference

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Aura Nova</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); background: #000; color: #eee; font: 16px -apple-system, system-ui, sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8e8e93; margin: 0 0 8px; font-weight: 600; }
+    section { background: #1c1c1e; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    button { font: inherit; border-radius: 8px; border: 0; padding: 10px 12px; background: #0a84ff; color: #fff; }
+    button.secondary { background: #3a3a3c; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .row > button { flex: 1; }
+    #status { font-size: 14px; color: #8e8e93; margin-left: 8px; }
+    #ink { display: block; width: 100%; height: 300px; background: #fff; border-radius: 10px; touch-action: none; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
+    .stats div { background: #2c2c2e; border-radius: 8px; padding: 8px; }
+    .stats b { display: block; color: #8e8e93; font: 600 11px -apple-system, system-ui, sans-serif; text-transform: uppercase; margin-bottom: 2px; }
+    label.check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 15px; }
+    #snapshot { display: none; width: 100%; max-width: 200px; margin-top: 8px; border-radius: 8px; }
+    #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; -webkit-user-select: text; user-select: text; }
+    [disabled] { opacity: .4; }
+  </style>
+</head>
+<body>
+  <h1>Aura Nova <span id="status">déconnecté</span></h1>
+
+  <section>
+    <button id="connect">Connecter le stylo</button>
+    <button id="disconnect" class="secondary" disabled>Déconnecter</button>
+  </section>
+
+  <section>
+    <h2>Tracé</h2>
+    <canvas id="ink"></canvas>
+    <div class="row">
+      <button id="clear" class="secondary">Effacer</button>
+      <button id="undo" class="secondary">Annuler le trait</button>
+    </div>
+    <div class="row">
+      <button id="svg" class="secondary">Copier le SVG</button>
+      <button id="image" class="secondary">Image OCR</button>
+    </div>
+    <img id="snapshot" alt="">
+    <label class="check"><input id="clearOnPage" type="checkbox" checked> Effacer à chaque nouvelle feuille</label>
+  </section>
+
+  <section>
+    <h2>Stylo</h2>
+    <div class="stats">
+      <div><b>x · y</b><span id="xy">—</span></div>
+      <div><b>Pression</b><span id="force">—</span></div>
+      <div><b>Page</b><span id="page">—</span></div>
+      <div><b>Cadence</b><span id="hz">—</span></div>
+      <div><b>Traits</b><span id="strokes">0</span></div>
+      <div><b>Trames</b><span id="frames">—</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Journal</h2>
+    <div id="log"></div>
+  </section>
+
+  <script src="../aurakit-mock.js"></script>
+  <script src="../devices/aura-nova.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent; };
+    const hex = (n) => n == null ? '—' : n.toString(16).toUpperCase().padStart(8, '0');
+    let pen = null;
+    let frame = 0;
+
+    const setConnected = (on) => {
+      $('connect').disabled = on;
+      $('disconnect').disabled = !on;
+    };
+    const run = (fn) => async () => { try { await fn(); } catch (e) { log('⚠️ ' + e.message); } };
+
+    // Redraws at most once per animation frame (~33 points per second arrive).
+    const redraw = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (!pen) return;
+        pen.draw($('ink'), { color: '#0a84ff', lineWidth: 2.5 });
+        $('strokes').textContent = pen.strokes.length;
+      });
+    };
+    window.addEventListener('resize', redraw);
+
+    $('connect').onclick = run(async () => {
+      pen = new AuraNova({ clearOnPageChange: $('clearOnPage').checked });
+      const seen = new Set();
+      pen.on('discovered', (d) => { if (d.name && !seen.has(d.id)) { seen.add(d.id); log('BLE vu : ' + d.name + ' (' + d.rssi + ' dBm)'); } });
+      pen.on('status', ({ state, name, attempt }) => {
+        $('status').textContent = state + (name ? ' · ' + name : '') + (attempt ? ' #' + attempt : '');
+        setConnected(state === 'connected' || state === 'reconnecting');
+        if (state !== 'scanning') log('état : ' + state + (name ? ' (' + name + ')' : ''));
+      });
+      pen.on('point', ({ x, y, force }) => {
+        $('xy').textContent = x + ' · ' + y;
+        $('force').textContent = force;
+      });
+      pen.on('page', ({ page }) => { $('page').textContent = hex(page); log('nouvelle feuille ' + hex(page)); });
+      pen.on('stroke', (s) => log('trait : ' + s.length + ' points'));
+      pen.on('change', redraw);
+      pen.on('stats', ({ hz, frames, rejects, sentinels }) => {
+        $('hz').textContent = hz.toFixed(1) + ' Hz';
+        $('frames').textContent = frames + ' · ' + rejects + ' · ' + sentinels;
+      });
+      $('connect').disabled = true;
+      try { await pen.connect(); }
+      catch (e) { $('status').textContent = 'déconnecté'; setConnected(false); throw e; }
+    });
+
+    $('disconnect').onclick = run(() => pen.disconnect());
+    $('clear').onclick = () => { if (pen) pen.clear(); $('snapshot').style.display = 'none'; };
+    $('undo').onclick = () => pen && pen.undo();
+    $('clearOnPage').onchange = () => { if (pen) pen.options.clearOnPageChange = $('clearOnPage').checked; };
+
+    $('svg').onclick = run(async () => {
+      if (!pen || !pen.strokes.length) return log('rien à copier');
+      const svg = pen.toSVG();
+      await navigator.clipboard.writeText(svg);
+      log('SVG copié (' + svg.length + ' caractères)');
+    });
+    $('image').onclick = () => {
+      if (!pen || !pen.strokes.length) return log("rien à exporter");
+      $('snapshot').src = pen.toDataURL();
+      $('snapshot').style.display = 'block';
+      log("image prête pour l'OCR (500 × 800, JPEG)");
+    };
+
+    log('Légende : x · y en unités stylo (~23,6 par mm) · trames = reçues · rejetées · sentinelles');
+    if (!AuraNova.isAvailable()) log('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.');
+  </script>
+</body>
+</html>

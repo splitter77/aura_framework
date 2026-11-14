@@ -385,6 +385,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Haptics are logged to the console.
 - Proximity: press **P** to cover / uncover the sensor while it is watched.
 - Bluetooth: one device, **Mock Sensor** (`id` `MOCK-BLE-0001`, service `FFE0`, characteristic `FFE1`: read returns the last value written, notifications send a counter every second).
+- Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
 - `deviceInfo()` returns fake identifiers.
 - `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
 
@@ -392,7 +393,7 @@ The tabs share `localStorage`: a room code saved in one tab is used by the other
 
 ## 15. Device drivers: `devices/`
 
-`devices/aura-atom.js` (Electricks **Atom 2**) and `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
+`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) and `devices/aura-nova.js` (**Nova Pen**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
 
 ```js
 const atom = await AuraAtom.connect({ timeout: 15, lang: 'en' });
@@ -404,6 +405,34 @@ await ps.text('Q♥');
 ```
 
 Main members: `connect(options)` (`timeout`, `name`, `autoReconnect`, `lang`), `disconnect()`, `vibrate(pattern)`, `battery()`, `on(event, fn)`; Atom: `led(color, { blink })`, `configureButtons()`, `runScript(code)`; PeekSmith: `text(value)`, `clear()`, `brightness()`, `font()`, `align()`, `rotate()`, `subscribeTaps()`. Events: `button`, `press`, `release`, `click`, `longpress`, `status`, `connect`, `disconnect`… Protocols: [Electricks developer docs](https://developers.electricks.info/docs/bluetooth/devices/atom-2).
+
+### Nova Pen: `devices/aura-nova.js`
+
+`AuraNova` reads the **Nova Pen** (Ophaya 60BP optical smartpen) live. Demo: `examples/aura_nova.html`.
+
+```js
+const pen = await AuraNova.connect({ lang: 'en' });
+pen.on('point', ({ x, y, force, page }) => console.log(x, y, force));
+pen.on('stroke', (points) => console.log('stroke of', points.length, 'points'));
+pen.on('page', ({ page }) => console.log('new sheet', page));
+pen.on('change', () => pen.draw(canvas));
+```
+
+The pen does not advertise its service, so `connect()` scans without a filter and keeps the first device whose name contains `60BP`, `AFPEN`, `OPHAYA`, `SMARTPEN` or `APEN`. It needs no pairing and no init command: it subscribes to `69400003-B5A3-F393-E0A9-E50E24DCCA99` and receives about 33 points per second. The pen never says when the tip lifts: AuraNova infers it from sentinel frames, or from 120 ms without a point. A new page id must hold for 5 frames before it counts.
+
+| Member | Meaning |
+| --- | --- |
+| `connect(options)` | `timeout` (20 s), `name` (exact name instead of the hints), `nameHints`, `autoReconnect` (`true`), `clearOnPageChange` (`true`), `lang`. |
+| `disconnect()` | Disconnects and stops reconnecting. |
+| `strokes` | Strokes of the current sheet: `[[{ x, y, force }]]`, in pen units (`AuraNova.UNITS_PER_MM` ≈ 23.6 per mm; force 0 to 1023). |
+| `page`, `connected`, `name`, `stats` | Current sheet id, connection, pen name, `{ frames, rejects, sentinels, hz }`. |
+| `clear()` / `undo()` | Forgets all strokes / the last one. |
+| `bounds()` | Bounding box of the ink, or `null`. |
+| `draw(canvas, { color, lineWidth, background, maxScale })` | Draws the ink fitted to the canvas. |
+| `toDataURL({ width = 500, height = 800, lineWidth = 15 })` | Black ink on white, fitted (JPEG): ready to send to a handwriting recognition service. |
+| `toSVG({ color, strokeWidth, margin })` | The ink as SVG, in millimetres. |
+
+Events: `point`, `down` (first point of a stroke), `up` (`{ stroke }`), `stroke` (the finished points), `page`, `change`, `stats` (every second), `discovered` (each device seen while scanning), `status` (`scanning`, `connecting`, `connected`, `reconnecting`, `disconnected`), `connect`, `disconnect`. The decoder is exposed for tests: `AuraNova.decodeFrame`, `AuraNova.FrameAssembler`, `AuraNova.StreamProcessor`.
 
 ## 16. Wire format
 
