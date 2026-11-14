@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Aura Nova</title>
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); background: #000; color: #eee; font: 16px -apple-system, system-ui, sans-serif; }
@@ -23,47 +24,51 @@
     #snapshot { display: none; width: 100%; max-width: 200px; margin-top: 8px; border-radius: 8px; }
     #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; -webkit-user-select: text; user-select: text; }
     [disabled] { opacity: .4; }
+    nav.lang { display: flex; gap: 8px; justify-content: center; margin: 4px 0 12px; }
+    nav.lang button { background: none; color: #8e8e93; padding: 6px 10px; font-size: 14px; }
   </style>
 </head>
 <body>
-  <h1>Aura Nova <span id="status">déconnecté</span></h1>
+  <h1>Aura Nova <span id="status" data-en="disconnected">déconnecté</span></h1>
 
   <section>
-    <button id="connect">Connecter le stylo</button>
-    <button id="disconnect" class="secondary" disabled>Déconnecter</button>
+    <button id="connect" data-en="Connect the pen">Connecter le stylo</button>
+    <button id="disconnect" class="secondary" disabled data-en="Disconnect">Déconnecter</button>
   </section>
 
   <section>
-    <h2>Tracé</h2>
+    <h2 data-en="Ink">Tracé</h2>
     <canvas id="ink"></canvas>
     <div class="row">
-      <button id="clear" class="secondary">Effacer</button>
-      <button id="undo" class="secondary">Annuler le trait</button>
+      <button id="clear" class="secondary" data-en="Clear">Effacer</button>
+      <button id="undo" class="secondary" data-en="Undo stroke">Annuler le trait</button>
     </div>
     <div class="row">
-      <button id="svg" class="secondary">Copier le SVG</button>
-      <button id="image" class="secondary">Image OCR</button>
+      <button id="svg" class="secondary" data-en="Copy SVG">Copier le SVG</button>
+      <button id="image" class="secondary" data-en="OCR image">Image OCR</button>
     </div>
     <img id="snapshot" alt="">
-    <label class="check"><input id="clearOnPage" type="checkbox" checked> Effacer à chaque nouvelle feuille</label>
+    <label class="check"><input id="clearOnPage" type="checkbox" checked> <span data-en="Clear on each new sheet">Effacer à chaque nouvelle feuille</span></label>
   </section>
 
   <section>
-    <h2>Stylo</h2>
+    <h2 data-en="Pen">Stylo</h2>
     <div class="stats">
       <div><b>x · y</b><span id="xy">—</span></div>
-      <div><b>Pression</b><span id="force">—</span></div>
+      <div><b data-en="Pressure">Pression</b><span id="force">—</span></div>
       <div><b>Page</b><span id="page">—</span></div>
-      <div><b>Cadence</b><span id="hz">—</span></div>
-      <div><b>Traits</b><span id="strokes">0</span></div>
-      <div><b>Trames</b><span id="frames">—</span></div>
+      <div><b data-en="Rate">Cadence</b><span id="hz">—</span></div>
+      <div><b data-en="Strokes">Traits</b><span id="strokes">0</span></div>
+      <div><b data-en="Frames">Trames</b><span id="frames">—</span></div>
     </div>
   </section>
 
   <section>
-    <h2>Journal</h2>
+    <h2 data-en="Log">Journal</h2>
     <div id="log"></div>
   </section>
+
+  <nav class="lang"><button data-set-lang="fr">Français</button><button data-set-lang="en">English</button></nav>
 
   <script src="../aurakit-mock.js"></script>
   <script src="../devices/aura-nova.js"></script>
@@ -71,6 +76,10 @@
     const $ = (id) => document.getElementById(id);
     const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent; };
     const hex = (n) => n == null ? '—' : n.toString(16).toUpperCase().padStart(8, '0');
+    const STATES = {
+      scanning: t('recherche…', 'searching…'), connecting: t('connexion…', 'connecting…'), connected: t('connecté', 'connected'),
+      reconnecting: t('reconnexion…', 'reconnecting…'), disconnected: t('déconnecté', 'disconnected'),
+    };
     let pen = null;
     let frame = 0;
 
@@ -93,20 +102,20 @@
     window.addEventListener('resize', redraw);
 
     $('connect').onclick = run(async () => {
-      pen = new AuraNova({ clearOnPageChange: $('clearOnPage').checked });
+      pen = new AuraNova({ clearOnPageChange: $('clearOnPage').checked, lang: AuraI18n.lang });
       const seen = new Set();
-      pen.on('discovered', (d) => { if (d.name && !seen.has(d.id)) { seen.add(d.id); log('BLE vu : ' + d.name + ' (' + d.rssi + ' dBm)'); } });
+      pen.on('discovered', (d) => { if (d.name && !seen.has(d.id)) { seen.add(d.id); log(t('BLE vu : ', 'BLE seen: ') + d.name + ' (' + d.rssi + ' dBm)'); } });
       pen.on('status', ({ state, name, attempt }) => {
-        $('status').textContent = state + (name ? ' · ' + name : '') + (attempt ? ' #' + attempt : '');
+        $('status').textContent = (STATES[state] || state) + (name ? ' · ' + name : '') + (attempt ? ' #' + attempt : '');
         setConnected(state === 'connected' || state === 'reconnecting');
-        if (state !== 'scanning') log('état : ' + state + (name ? ' (' + name + ')' : ''));
+        if (state !== 'scanning') log(t('état : ', 'state: ') + (STATES[state] || state) + (name ? ' (' + name + ')' : ''));
       });
       pen.on('point', ({ x, y, force }) => {
         $('xy').textContent = x + ' · ' + y;
         $('force').textContent = force;
       });
-      pen.on('page', ({ page }) => { $('page').textContent = hex(page); log('nouvelle feuille ' + hex(page)); });
-      pen.on('stroke', (s) => log('trait : ' + s.length + ' points'));
+      pen.on('page', ({ page }) => { $('page').textContent = hex(page); log(t('nouvelle feuille ', 'new sheet ') + hex(page)); });
+      pen.on('stroke', (s) => log(t('trait : ', 'stroke: ') + s.length + ' points'));
       pen.on('change', redraw);
       pen.on('stats', ({ hz, frames, rejects, sentinels }) => {
         $('hz').textContent = hz.toFixed(1) + ' Hz';
@@ -114,7 +123,7 @@
       });
       $('connect').disabled = true;
       try { await pen.connect(); }
-      catch (e) { $('status').textContent = 'déconnecté'; setConnected(false); throw e; }
+      catch (e) { $('status').textContent = STATES.disconnected; setConnected(false); throw e; }
     });
 
     $('disconnect').onclick = run(() => pen.disconnect());
@@ -123,20 +132,22 @@
     $('clearOnPage').onchange = () => { if (pen) pen.options.clearOnPageChange = $('clearOnPage').checked; };
 
     $('svg').onclick = run(async () => {
-      if (!pen || !pen.strokes.length) return log('rien à copier');
+      if (!pen || !pen.strokes.length) return log(t('rien à copier', 'nothing to copy'));
       const svg = pen.toSVG();
       await navigator.clipboard.writeText(svg);
-      log('SVG copié (' + svg.length + ' caractères)');
+      log(t('SVG copié (', 'SVG copied (') + svg.length + t(' caractères)', ' characters)'));
     });
     $('image').onclick = () => {
-      if (!pen || !pen.strokes.length) return log("rien à exporter");
+      if (!pen || !pen.strokes.length) return log(t('rien à exporter', 'nothing to export'));
       $('snapshot').src = pen.toDataURL();
       $('snapshot').style.display = 'block';
-      log("image prête pour l'OCR (500 × 800, JPEG)");
+      log(t("image prête pour l'OCR (500 × 800, JPEG)", 'image ready for OCR (500 × 800, JPEG)'));
     };
 
-    log('Légende : x · y en unités stylo (~23,6 par mm) · trames = reçues · rejetées · sentinelles');
-    if (!AuraNova.isAvailable()) log('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.');
+    log(t('Légende : x · y en unités stylo (~23,6 par mm) · trames = reçues · rejetées · sentinelles',
+      'Legend: x · y in pen units (~23.6 per mm) · frames = received · rejected · sentinels'));
+    if (!AuraNova.isAvailable()) log(t('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.',
+      'Open this page in Aura (HTTPS, bookmarked domain), or add ?mock=host for the simulator.'));
   </script>
 </body>
 </html>
