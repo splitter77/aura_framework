@@ -24,12 +24,19 @@
     #snapshot { display: none; width: 100%; max-width: 200px; margin-top: 8px; border-radius: 8px; }
     #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; -webkit-user-select: text; user-select: text; }
     [disabled] { opacity: .4; }
-    nav.lang { display: flex; gap: 8px; justify-content: center; margin: 4px 0 12px; }
-    nav.lang button { background: none; color: #8e8e93; padding: 6px 10px; font-size: 14px; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    nav.lang { display: flex; gap: 2px; flex: 0 0 auto; }
+    nav.lang button { background: none; color: #8e8e93; padding: 4px 6px; font-size: 14px; }
+    nav.lang button[aria-current="true"] { color: #fff; font-weight: 600; }
+    #error { display: none; background: #3a1d1d; color: #ff9f99; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 15px; }
   </style>
 </head>
 <body>
-  <h1>Aura Nova <span id="status" data-en="disconnected">déconnecté</span></h1>
+  <header>
+    <h1>Aura Nova <span id="status" data-en="disconnected">déconnecté</span></h1>
+    <nav class="lang"><button data-set-lang="fr">FR</button><button data-set-lang="en">EN</button></nav>
+  </header>
+  <div id="error" role="alert"></div>
 
   <section>
     <button id="connect" data-en="Connect the pen">Connecter le stylo</button>
@@ -68,16 +75,23 @@
     <div id="log"></div>
   </section>
 
-  <nav class="lang"><button data-set-lang="fr">Français</button><button data-set-lang="en">English</button></nav>
-
   <script src="../aurakit-mock.js"></script>
   <script src="../devices/aura-nova.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
+    // If a script did not load (wrong path, file not uploaded), say so instead of failing silently.
+    if (typeof window.t !== 'function') window.t = (fr) => fr;
+    const missing = [typeof AuraI18n === 'undefined' && 'aurakit-i18n.js', typeof AuraNova === 'undefined' && 'aura-nova.js'].filter(Boolean);
+    if (missing.length) {
+      const box = $('error');
+      box.textContent = 'Script(s) introuvable(s) / missing: ' + missing.join(', ') + ' (' + document.querySelector('script[src*="aura-nova"]').src.replace(/[^/]*$/, '') + ')';
+      box.style.display = 'block';
+      throw new Error('Missing ' + missing.join(', '));
+    }
     const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent; };
     const hex = (n) => n == null ? '—' : n.toString(16).toUpperCase().padStart(8, '0');
     const STATES = {
-      scanning: t('recherche…', 'searching…'), connecting: t('connexion…', 'connecting…'), connected: t('connecté', 'connected'),
+      permission: t("autorisation Bluetooth…", 'Bluetooth permission…'), scanning: t('recherche…', 'searching…'), connecting: t('connexion…', 'connecting…'), connected: t('connecté', 'connected'),
       reconnecting: t('reconnexion…', 'reconnecting…'), disconnected: t('déconnecté', 'disconnected'),
     };
     let pen = null;
@@ -87,7 +101,8 @@
       $('connect').disabled = on;
       $('disconnect').disabled = !on;
     };
-    const run = (fn) => async () => { try { await fn(); } catch (e) { log('⚠️ ' + e.message); } };
+    const showError = (msg) => { $('error').textContent = msg || ''; $('error').style.display = msg ? 'block' : 'none'; };
+    const run = (fn) => async () => { try { await fn(); } catch (e) { showError(e.message); log('⚠️ ' + e.message); } };
 
     // Redraws at most once per animation frame (~33 points per second arrive).
     const redraw = () => {
@@ -102,12 +117,14 @@
     window.addEventListener('resize', redraw);
 
     $('connect').onclick = run(async () => {
+      showError('');
       pen = new AuraNova({ clearOnPageChange: $('clearOnPage').checked, lang: AuraI18n.lang });
       const seen = new Set();
       pen.on('discovered', (d) => { if (d.name && !seen.has(d.id)) { seen.add(d.id); log(t('BLE vu : ', 'BLE seen: ') + d.name + ' (' + d.rssi + ' dBm)'); } });
       pen.on('status', ({ state, name, attempt }) => {
         $('status').textContent = (STATES[state] || state) + (name ? ' · ' + name : '') + (attempt ? ' #' + attempt : '');
         setConnected(state === 'connected' || state === 'reconnecting');
+        if (state === 'connected') showError('');
         if (state !== 'scanning') log(t('état : ', 'state: ') + (STATES[state] || state) + (name ? ' (' + name + ')' : ''));
       });
       pen.on('point', ({ x, y, force }) => {
@@ -146,7 +163,7 @@
 
     log(t('Légende : x · y en unités stylo (~23,6 par mm) · trames = reçues · rejetées · sentinelles',
       'Legend: x · y in pen units (~23.6 per mm) · frames = received · rejected · sentinels'));
-    if (!AuraNova.isAvailable()) log(t('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.',
+    if (!AuraNova.isAvailable()) showError(t('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.',
       'Open this page in Aura (HTTPS, bookmarked domain), or add ?mock=host for the simulator.'));
   </script>
 </body>

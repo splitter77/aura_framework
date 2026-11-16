@@ -28,13 +28,21 @@
   const MESSAGES = {
     fr: {
       noAura: "window.Aura indisponible : ouvrez cette page dans Aura, en HTTPS, sur un domaine présent dans vos favoris.",
+      notTrusted: "Aura refuse le Bluetooth à cette page : ajoutez son domaine à vos favoris Aura, puis rechargez-la.",
       bluetooth: (s) => `Bluetooth indisponible (${s}).`,
+      unauthorized: "Accès Bluetooth refusé : autorisez-le dans Réglages › Aura › Bluetooth.",
+      poweredOff: 'Le Bluetooth est éteint : allumez-le et réessayez.',
+      noAnswer: "Bluetooth sans réponse : acceptez la demande d'accès au Bluetooth, puis réessayez.",
       notFound: 'Aucun stylo Nova trouvé à proximité. Allumez-le et réessayez.',
       notPen: "Cet appareil n'a pas de caractéristique notifiable : ce n'est pas le stylo.",
     },
     en: {
       noAura: 'window.Aura is unavailable: open this page in Aura, over HTTPS, on a domain in your bookmarks.',
+      notTrusted: 'Aura refuses Bluetooth to this page: add its domain to your Aura bookmarks, then reload it.',
       bluetooth: (s) => `Bluetooth is unavailable (${s}).`,
+      unauthorized: 'Bluetooth access was denied: allow it in Settings › Aura › Bluetooth.',
+      poweredOff: 'Bluetooth is turned off: turn it on and try again.',
+      noAnswer: 'Bluetooth does not answer: accept the Bluetooth access request, then try again.',
       notFound: 'No Nova pen found nearby. Turn it on and try again.',
       notPen: 'This device has no notifying characteristic: it is not the pen.',
     },
@@ -227,8 +235,7 @@
       if (!AuraNova.isAvailable()) throw new Error(this._t.noAura);
       const bt = global.Aura.bluetooth;
       this._manual = false;
-      const state = await bt.state().catch(() => 'unknown');
-      if (state !== 'poweredOn' && state !== 'unknown') throw new Error(this._t.bluetooth(state));
+      await this._ready();
 
       if (!this.id) {
         this._emit('status', { state: 'scanning' });
@@ -237,7 +244,8 @@
         this.name = device.name || 'Nova';
       }
       this._emit('status', { state: 'connecting', name: this.name });
-      const info = await bt.connect(this.id, { timeout: this.options.timeout });
+      let info;
+      try { info = await bt.connect(this.id, { timeout: this.options.timeout }); } catch (e) { throw this._bridgeError(e); }
       const target = this._pickCharacteristic((info && info.services) || []);
       if (!target) {
         try { await bt.disconnect(this.id); } catch (_) {}
@@ -265,6 +273,47 @@
       this._dropped();
     }
 
+    /**
+     * Waits for Bluetooth to be usable. The first call creates the native manager, which makes iOS show
+     * the Bluetooth permission request: the state stays 'unknown' until the user answers it.
+     */
+    async _ready() {
+      const bt = global.Aura.bluetooth;
+      let state;
+      try { state = await bt.state(); } catch (e) { throw this._bridgeError(e); }
+      if (state === 'unknown' || state === 'resetting') {
+        this._emit('status', { state: 'permission' });
+        state = await new Promise((resolve) => {
+          const off = global.Aura.on('bluetooth.state', (d) => {
+            if (d && d.state !== 'unknown' && d.state !== 'resetting') { clearInterval(poll); off(); resolve(d.state); }
+          });
+          // The event may have fired before we subscribed: poll as well.
+          const t0 = Date.now();
+          const poll = setInterval(async () => {
+            let s = 'unknown';
+            try { s = await bt.state(); } catch (_) {}
+            if ((s !== 'unknown' && s !== 'resetting') || Date.now() - t0 > AuraNova.PERMISSION_TIMEOUT * 1000) {
+              clearInterval(poll); off(); resolve(s);
+            }
+          }, 500);
+        });
+      }
+      if (state === 'poweredOn') return;
+      if (state === 'unauthorized') throw new Error(this._t.unauthorized);
+      if (state === 'poweredOff') throw new Error(this._t.poweredOff);
+      if (state === 'unknown' || state === 'resetting') throw new Error(this._t.noAnswer);
+      throw new Error(this._t.bluetooth(state));
+    }
+
+    /** Native errors in the page's language when we know them. */
+    _bridgeError(e) {
+      const msg = String((e && e.message) || e);
+      if (/not allowed to use native features|only the page opened by the App Clip/i.test(msg)) return new Error(this._t.notTrusted);
+      if (/permission was denied/i.test(msg)) return new Error(this._t.unauthorized);
+      if (/turned off/i.test(msg)) return new Error(this._t.poweredOff);
+      return e instanceof Error ? e : new Error(msg);
+    }
+
     /** Unfiltered scan (the pen does not advertise its service), matched on the name. */
     _find() {
       const bt = global.Aura.bluetooth;
@@ -288,7 +337,7 @@
           if (matches(d.name)) finish(resolve, d);
         });
         const timer = setTimeout(() => finish(reject, new Error(this._t.notFound)), this.options.timeout * 1000);
-        Promise.resolve(bt.scan({ services: [] })).catch((e) => finish(reject, e));
+        Promise.resolve(bt.scan({ services: [] })).catch((e) => finish(reject, this._bridgeError(e)));
       });
     }
 
@@ -466,7 +515,8 @@
     /**
      * 'point' ({ x, y, force, page }), 'down' (same, first point of a stroke), 'up' ({ stroke }),
      * 'stroke' (the finished stroke), 'page' ({ page }), 'change' (strokes), 'stats' ({ frames, rejects, sentinels, hz }),
-     * 'discovered' (each device seen while scanning), 'status', 'connect', 'disconnect'. Returns off().
+     * 'discovered' (each device seen while scanning), 'status' ({ state: 'permission' | 'scanning' | 'connecting' |
+     * 'connected' | 'reconnecting' | 'disconnected' }), 'connect', 'disconnect'. Returns off().
      */
     on(name, callback) {
       (this._listeners[name] = this._listeners[name] || new Set()).add(callback);
@@ -488,6 +538,8 @@
   AuraNova.NOTIFY_CHARACTERISTIC = NOTIFY;
   AuraNova.NAME_HINTS = NAME_HINTS;
   AuraNova.UNITS_PER_MM = UNITS_PER_MM;
+  /** Seconds left to the user to answer the iOS Bluetooth permission request. */
+  AuraNova.PERMISSION_TIMEOUT = 60;
   AuraNova.decodeFrame = decodeFrame;
   AuraNova.FrameAssembler = FrameAssembler;
   AuraNova.StreamProcessor = StreamProcessor;
