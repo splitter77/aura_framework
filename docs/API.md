@@ -7,7 +7,7 @@
 5. [Shared state: `link.shared()`](#5-shared-state-linkshared)
 6. [Bluetooth LE: `AuraKit.ble`](#6-bluetooth-le-aurakitble)
 7. [Proximity: `AuraKit.proximity`](#7-proximity-aurakitproximity)
-8. [Screen and buttons: `statusBar`, `orientation`, `volumeButtons`](#8-screen-and-buttons-statusbar-orientation-volumebuttons)
+8. [Screen and buttons: `statusBar`, `orientation`, `volumeButtons`](#8-screen-and-buttons-statusbar-orientation-volumebuttons) — and the experimental [Liquid Glass buttons](#liquid-glass-buttons-experimental-aurakitexperimentalglass)
 9. [Camera and torch: `AuraKit.camera`](#9-camera-and-torch-aurakitcamera)
 10. [Device identifiers: `AuraKit.device()`](#10-device-identifiers-aurakitdevice)
 11. [Events and raw calls](#11-events-and-raw-calls)
@@ -47,7 +47,7 @@ Resolves once (later calls return the same promise) to:
 | `available` | `true` when native features work on this page. |
 | `appClip` | `true` in the AuraClip App Clip. |
 | `browser` | `true` in Aura Browser. |
-| `caps` | `Aura.capabilities()`: `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons }`, or `null` (the last three are missing before Aura 1.9). |
+| `caps` | `Aura.capabilities()`: `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass }`, or `null` (the last five are missing before Aura 1.9; `liquidGlass` is `true` on iOS 26 or later). |
 | `frame` | `true` when the page is inside an iframe. |
 | `proxied` | `true` when an iframe uses Aura through its parent page (see [iframes](#12-iframes)). |
 | `mock` | `true` with the desktop simulator. |
@@ -305,6 +305,58 @@ Notes:
 - Watching activates the app's audio session in a mode that does not stop music from other apps.
 - In the **App Clip**, Apple does not give App Clips the framework Aura uses to hide the indicator and keep the volume (Media Player): presses are still detected, but the iOS volume indicator may appear and the volume may move, and once the volume reaches the maximum (or zero) that button is no longer detected. Test it on your device.
 
+### Liquid Glass buttons (experimental): `AuraKit.experimental.glass`
+
+> **Experimental.** The API may change, and the result is not perfect yet (see the limits below).
+
+Aura draws **native** buttons over HTML elements: real **Liquid Glass** on iOS 26 or later, the system blur before. The HTML element is made transparent and stays in the page, so it still gives the button its place, its size and its click handler. A tap on the native button clicks the element.
+
+```html
+<button data-aura-glass>Normal</button>
+<button data-aura-glass="prominent" data-aura-tint="#0a84ff" data-aura-symbol="plus">Add</button>
+<button data-aura-glass data-aura-symbol="heart.fill" data-aura-title="" aria-label="like">♥</button>
+```
+
+Elements with `data-aura-glass` are attached by themselves when the page loads. From JavaScript:
+
+```js
+const glass = AuraKit.experimental.glass;
+const button = await glass.attach(document.querySelector('#go'), { style: 'prominent', symbol: 'play.fill' });
+button.on('tap', () => console.log('tapped'));
+await button.update({ title: 'Stop', symbol: 'stop.fill' });
+await button.remove();                         // the HTML element shows again
+```
+
+| Option (attribute) | Meaning |
+| --- | --- |
+| `style` (`data-aura-glass="…"`) | `'regular'` (default), `'prominent'` (coloured), `'clear'` (more transparent), `'prominentClear'`. |
+| `title` (`data-aura-title`) | Text of the native button. Default: the element's text. `""` for an icon only. |
+| `symbol` (`data-aura-symbol`) | Name of an SF Symbol shown before the title, e.g. `star.fill`. With a title, AuraKit widens the element so both fit. |
+| `tint` (`data-aura-tint`) | CSS colour (`#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()`): background of a prominent button, text and symbol of the others. |
+| `color` (`data-aura-color`) | Colour of the text and symbol. |
+| `fontSize` (`data-aura-font-size`) | In CSS px. Default: the element's font size. |
+| `cornerRadius` (`data-aura-corner-radius`) | In CSS px. Default: capsule. |
+| `click` | `false`: a tap only fires the `tap` event, without `element.click()`. |
+
+| Member | Meaning |
+| --- | --- |
+| `attach(element \| selector, options)` | Resolves to a `GlassButton` (`id`, `element`, `native`, `options`, `update(options)`, `remove()`, event `tap`). Attaching the same element again updates it. |
+| `attachAll(selector = '[data-aura-glass]', root)` | `attach()` for every match. |
+| `buttons()`, `clear()` | Every attached button / removes them all. |
+| `refresh()` | Sends every position again (if elements moved in a way AuraKit could not see). |
+| `native` | `true` when Aura draws the buttons. |
+| `liquid` | `true` when they are real Liquid Glass (iOS 26 or later). |
+
+How the buttons follow the page: AuraKit sends each element's frame in CSS pixels. A normal element is placed in document coordinates, inside the WebView's scroll view, so it **scrolls with the page natively, with no lag**. An element that is (or is inside) `position: fixed` or `sticky` is placed over the WebView in screen coordinates. AuraKit sends a frame again when the page scrolls or is resized, when the DOM changes, when an element changes size, at the end of transitions and animations, and once a second in any case.
+
+Known limits:
+- An element moved by an animation, a transform or a sticky position is followed with a delay (up to a frame, or a second for some animations): the native button lags behind.
+- Pinch zoom is approximated; HTML content drawn over the element (a menu opening above it) does not cover the native button: the native button is always on top.
+- Not in iframes; at most 64 buttons; the buttons are removed when another page loads.
+- Outside Aura (plain browser, iframe, older Aura) nothing native is drawn: the element gets the CSS class `ak-glass`, which `aurakit-ui.css` styles as frosted glass.
+
+Demo: `examples/glass.html`.
+
 ## 9. Camera and torch: `AuraKit.camera`
 
 ```js
@@ -343,7 +395,7 @@ const state = await AuraKit.call('bluetooth.state');
 
 | Function | Meaning |
 | --- | --- |
-| `AuraKit.on(name, fn)` / `AuraKit.off(name, fn)` | Native events: `peer.connected`, `peer.message`, `peer.disconnected`, `bluetooth.discovered`, `bluetooth.notification`, `bluetooth.state`, `bluetooth.disconnected`, `proximity`, `volumeButton`. They also work in iframes (except `peer.*`, which go through the link). |
+| `AuraKit.on(name, fn)` / `AuraKit.off(name, fn)` | Native events: `peer.connected`, `peer.message`, `peer.disconnected`, `bluetooth.discovered`, `bluetooth.notification`, `bluetooth.state`, `bluetooth.disconnected`, `proximity`, `volumeButton`, `glass.tap`. They also work in iframes (except `peer.*`, which go through the link). |
 | `AuraKit.call(path, ...args)` | Any native function by its path, e.g. `AuraKit.call('haptic', 'impact', { style: 'rigid' })`. |
 | `AuraKit.Emitter` | The small event class used everywhere (`on`, `once`, `off`, `emit`), for your own objects. |
 | `AuraKit.params` | `URLSearchParams` of the page. |
@@ -448,6 +500,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - `Aura.peer` goes through `BroadcastChannel`: open two tabs of the same browser. Rooms are respected, messages over 64 KB are refused like on the iPhone.
 - Haptics are logged to the console.
 - Proximity: press **P** to cover / uncover the sensor while it is watched.
+- Glass buttons: drawn in CSS, outlined in pink, exactly where Aura would put the native ones; click them like on the iPhone.
 - Volume buttons: press **+** (or **=**) and **-** while they are watched. Status bar and rotation lock calls are logged and keep their state.
 - Bluetooth: one device, **Mock Sensor** (`id` `MOCK-BLE-0001`, service `FFE0`, characteristic `FFE1`: read returns the last value written, notifications send a counter every second).
 - Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
@@ -554,7 +607,7 @@ AuraKit is built on the bridge that Aura Browser and the App Clip inject into tr
 
 | Function | Returns |
 | --- | --- |
-| `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons }` |
+| `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass }` |
 | `Aura.deviceInfo()` | `{ userId, vendorId, model, systemName, systemVersion, appClip }` |
 | `Aura.haptic(type, options)` / `Aura.haptic({ type: 'pattern', events })` | `impact` (`style`, `intensity`), `notification` (`style`), `selection`, or a pattern. |
 | `Aura.prepareHaptics()` | — |
@@ -567,6 +620,7 @@ AuraKit is built on the bridge that Aura Browser and the App Clip inject into tr
 | `Aura.statusBar.set({ hidden, transparent })` / `show({ transparent })` / `hide()` / `get()` | `{ hidden, transparent, fullScreen }` |
 | `Aura.orientation.lock(name)` / `unlock()` / `get()` | `{ orientation, locked }` |
 | `Aura.volumeButtons.start({ keepVolume })` / `stop()` | `{ volume, keepVolume }` / —; event `volumeButton` `{ button, volume }` |
+| `Aura.glass.set({ id, x, y, width, height, fixed, hidden, title, symbol, style, tint, color, fontSize, cornerRadius })` / `frames([{ id, x, y, width, height, fixed, hidden }])` / `remove(id)` / `clear()` | Experimental. Frames in CSS px (document coordinates, or viewport when `fixed`); event `glass.tap` `{ id }` |
 | `Aura.on(name, fn)` / `Aura.off(name, fn)` | Events; each one is also dispatched on `window` as `aura:<name>`. |
 
 Limits: no motion sensors (Apple blocks Core Motion in App Clips); every new page load closes the link, disconnects Bluetooth devices, stops the proximity sensor and the volume buttons, unlocks the rotation and gives the status bar back to the bookmark's setting, which is why a multi-screen experience should stay on one page (use `#hash` navigation or show/hide sections).

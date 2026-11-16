@@ -7,6 +7,7 @@
  * so the iPhone-to-iPhone link, messages, shared state and rooms work between the tabs.
  * Haptics are logged to the console. Press P to toggle the proximity sensor while it is watched.
  * Volume buttons: press + (or =) and - while they are watched. Status bar and rotation lock are logged.
+ * Glass buttons (experimental): drawn as CSS glass, outlined in pink, where Aura would put the native ones.
  * Bluetooth LE: "Mock Sensor", with a counter notifying every second (service FFE0, characteristic FFE1),
  * "60BP-MOCK", a Nova pen that writes a random number on a new sheet every few seconds (devices/aura-nova.js),
  * and "MA_Pouce_M0CK01", a PLB thumb button (devices/aura-plb.js): hold B to press its button. */
@@ -91,6 +92,30 @@
     log('volume button', button);
     emit('volumeButton', { button: button, volume: volume });
   });
+
+  // ---------------------------------------------------------------- glass buttons, drawn in CSS where Aura puts native ones
+  var glassLayer = null, glassEls = {};
+  var glassBox = function (id) {
+    if (!glassLayer) {
+      glassLayer = document.createElement('div');
+      glassLayer.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;z-index:2147483646';
+      document.documentElement.appendChild(glassLayer);
+    }
+    var b = glassEls[id];
+    if (!b) {
+      b = glassEls[id] = document.createElement('button');
+      b.type = 'button';
+      b.addEventListener('click', function (e) { e.stopPropagation(); log('glass tap', id); emit('glass.tap', { id: id }); });
+      glassLayer.appendChild(b);
+    }
+    return b;
+  };
+  var glassPlace = function (b, f) {
+    b.style.position = f.fixed ? 'fixed' : 'absolute';
+    b.style.left = (f.x || 0) + 'px'; b.style.top = (f.y || 0) + 'px';
+    b.style.width = Math.max(f.width || 0, 1) + 'px'; b.style.height = Math.max(f.height || 0, 1) + 'px';
+    if (typeof f.hidden === 'boolean') b.style.display = f.hidden ? 'none' : 'flex';
+  };
 
   // ---------------------------------------------------------------- fake Bluetooth devices
   var DEV = { id: 'MOCK-BLE-0001', name: 'Mock Sensor', rssi: -52 };
@@ -248,7 +273,7 @@
     version: 1,
     capabilities: function () {
       return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true,
-        statusBar: true, orientationLock: true, volumeButtons: true });
+        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false });
     },
     deviceInfo: function () {
       return ok({ userId: appClip ? 'MOCK-TAG-ID' : 'MOCK-USER-ID', vendorId: 'MOCK-' + me, model: 'Simulator', systemName: 'Web', systemVersion: '1', appClip: appClip });
@@ -283,6 +308,26 @@
       },
       unlock: function () { lockedOrientation = null; log('rotation unlocked'); return ok({ orientation: currentOrientation(), locked: null }); },
       get: function () { return ok({ orientation: currentOrientation(), locked: lockedOrientation }); },
+    },
+    glass: {
+      set: function (o) {
+        o = o || {};
+        if (!o.id) return fail('Aura: missing or invalid glass button id.');
+        var b = glassBox(o.id), prominent = /^prominent/.test(o.style || '');
+        b.textContent = (o.symbol ? '◆ ' : '') + (o.title || '');
+        b.style.cssText += ';display:flex;align-items:center;justify-content:center;box-sizing:border-box;white-space:nowrap;overflow:hidden;margin:0;padding:0 12px;cursor:pointer;' +
+          'font:' + (prominent ? '600 ' : '500 ') + (o.fontSize || 17) + 'px -apple-system,system-ui,sans-serif;' +
+          'border-radius:' + (o.cornerRadius != null ? o.cornerRadius + 'px' : '999px') + ';' +
+          'color:' + (o.color || (prominent ? '#fff' : o.tint || '#fff')) + ';' +
+          'background:' + (prominent ? (o.tint || '#0a84ff') : /clear/i.test(o.style || '') ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.16)') + ';' +
+          'border:1px solid rgba(255,255,255,0.35);outline:1px dashed #ff2d95;outline-offset:2px;' +
+          '-webkit-backdrop-filter:blur(14px) saturate(1.8);backdrop-filter:blur(14px) saturate(1.8);box-shadow:0 6px 20px rgba(0,0,0,0.3)';
+        glassPlace(b, o);
+        return ok();
+      },
+      frames: function (items) { (items || []).forEach(function (f) { if (glassEls[f.id]) glassPlace(glassEls[f.id], f); }); return ok(); },
+      remove: function (id) { var b = glassEls[id]; if (b) { b.remove(); delete glassEls[id]; } return ok(); },
+      clear: function () { Object.keys(glassEls).forEach(function (id) { glassEls[id].remove(); delete glassEls[id]; }); return ok(); },
     },
     volumeButtons: {
       start: function (o) {

@@ -10,6 +10,7 @@
  *   AuraKit.statusBar     show or hide the iOS status bar at any time
  *   AuraKit.orientation   lock the screen rotation
  *   AuraKit.volumeButtons the volume buttons as triggers
+ *   AuraKit.experimental.glass   EXPERIMENTAL native Liquid Glass buttons over HTML elements
  *   AuraKit.camera        camera, torch, snapshots
  *   AuraKit.device()      device identifiers
  *   AuraKit.quitAppClip() closes the App Clip
@@ -47,7 +48,7 @@
 
   // Every native event, re-emitted here (works the same in iframes).
   var EVENTS = ['peer.connected', 'peer.message', 'peer.disconnected', 'bluetooth.discovered',
-    'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity', 'volumeButton'];
+    'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity', 'volumeButton', 'glass.tap'];
   var bus = new Emitter();
   var native = function () { return window.Aura || null; };
   (function subscribeNative() {
@@ -458,6 +459,197 @@
     /** fn(detail) when volume down is pressed. */
     onDown: function (fn, options) { return volumeButtons.watch(function (d) { if (d && d.button === 'down') fn(d); }, options); },
   };
+
+  // ------------------------------------------------------------------ EXPERIMENTAL: Liquid Glass buttons
+  // Aura draws a native button (real Liquid Glass on iOS 26, a blur before) over an HTML element, which is
+  // made transparent. AuraKit keeps the native button on the element: it sends the element's frame in CSS
+  // pixels, in document coordinates (Aura scrolls the button with the page) or, for position: fixed / sticky
+  // elements, in viewport coordinates (sent again when they move). A tap on the native button clicks the element.
+  // Outside Aura (or in an iframe), the element only gets the CSS class "ak-glass" (see aurakit-ui.css).
+  var glassButtons = new Map();          // id -> GlassButton
+  var glassSeq = 0;
+  var glassTracking = false;
+  var glassFrame = 0;
+  var glassResize = typeof ResizeObserver === 'function' ? new ResizeObserver(function () { glassSchedule(); }) : null;
+  var glassNative = function () { return mode === 'native' && !!(env && env.available && env.caps && env.caps.glass); };
+
+  function glassIsFixed(el) {
+    for (var n = el; n && n.nodeType === 1; n = n.parentElement) {
+      var position = getComputedStyle(n).position;
+      if (position === 'fixed' || position === 'sticky') return true;
+    }
+    return false;
+  }
+
+  function glassFrameOf(el) {
+    var fixed = glassIsFixed(el);
+    var r = el.getBoundingClientRect();
+    var style = getComputedStyle(el);
+    var hidden = !el.isConnected || (r.width === 0 && r.height === 0) || style.display === 'none' || style.visibility === 'hidden';
+    return {
+      x: Math.round((r.left + (fixed ? 0 : window.scrollX)) * 10) / 10,
+      y: Math.round((r.top + (fixed ? 0 : window.scrollY)) * 10) / 10,
+      width: Math.round(r.width * 10) / 10,
+      height: Math.round(r.height * 10) / 10,
+      fixed: fixed,
+      hidden: hidden,
+    };
+  }
+
+  function glassSchedule() {
+    if (glassFrame || !glassButtons.size) return;
+    glassFrame = requestAnimationFrame(function () {
+      glassFrame = 0;
+      var items = [];
+      glassButtons.forEach(function (b) { var f = b._frameIfChanged(); if (f) items.push(f); });
+      if (items.length) quiet(call('glass.frames', items));
+    });
+  }
+
+  function glassStartTracking() {
+    if (glassTracking) return;
+    glassTracking = true;
+    var opts = { passive: true, capture: true };
+    ['scroll', 'resize', 'orientationchange', 'transitionend', 'animationend', 'load'].forEach(function (name) { window.addEventListener(name, glassSchedule, opts); });
+    if (window.visualViewport) { visualViewport.addEventListener('resize', glassSchedule); visualViewport.addEventListener('scroll', glassSchedule); }
+    if (typeof MutationObserver === 'function') {
+      new MutationObserver(glassSchedule).observe(document.documentElement, { attributes: true, childList: true, subtree: true, characterData: true });
+    }
+    if (glassResize && document.body) glassResize.observe(document.body);
+    setInterval(glassSchedule, 1000);     // safety net: animations and anything not observed
+  }
+
+  function glassOptions(el, o) {
+    var d = el.dataset || {};
+    var style = d.auraGlass && d.auraGlass !== 'true' ? d.auraGlass : 'regular';
+    var num = function (v) { return v == null || v === '' || isNaN(+v) ? null : +v; };
+    return {
+      title: o.title != null ? String(o.title) : (d.auraTitle != null ? d.auraTitle : (el.textContent || '').trim()),
+      symbol: o.symbol || d.auraSymbol || null,
+      style: o.style || style,
+      tint: o.tint || d.auraTint || null,
+      color: o.color || d.auraColor || null,
+      fontSize: num(o.fontSize) || num(d.auraFontSize) || parseFloat(getComputedStyle(el).fontSize) || 17,
+      cornerRadius: o.cornerRadius != null ? num(o.cornerRadius) : num(d.auraCornerRadius),
+    };
+  }
+
+  class GlassButton extends Emitter {
+    constructor(el, options) {
+      super();
+      this.id = 'g' + (++glassSeq);
+      this.element = el;
+      this.native = false;
+      this._raw = Object.assign({}, options);
+      this._key = '';
+      this._opacity = null;
+      this._padding = null;
+      this._onClick = () => this.emit('tap');
+      el.addEventListener('click', this._onClick);
+    }
+    get options() { return glassOptions(this.element, this._raw); }
+    async _start() {
+      glassButtons.set(this.id, this);
+      if (!glassNative()) { this.element.classList.add('ak-glass'); return this; }
+      var frame = glassFrameOf(this.element);
+      this._key = JSON.stringify(frame);
+      await call('glass.set', Object.assign({ id: this.id }, this.options, frame));
+      this.native = true;
+      this._opacity = this.element.style.opacity;
+      this.element.style.opacity = '0';
+      this._makeRoom();
+      if (glassResize) glassResize.observe(this.element);
+      glassStartTracking();
+      return this;
+    }
+    /** Changes the look: { title, symbol, style, tint, color, fontSize, cornerRadius }. */
+    async update(options) {
+      Object.assign(this._raw, options);
+      if (!this.native) return this;
+      this._makeRoom();
+      var frame = glassFrameOf(this.element);
+      this._key = JSON.stringify(frame);
+      await call('glass.set', Object.assign({ id: this.id }, this.options, frame));
+      return this;
+    }
+    /** Removes the native button and shows the HTML element again. */
+    async remove() {
+      if (!glassButtons.has(this.id)) return;
+      glassButtons.delete(this.id);
+      this.element.removeEventListener('click', this._onClick);
+      this.element.classList.remove('ak-glass');
+      if (glassResize) glassResize.unobserve(this.element);
+      if (this.native) {
+        this.native = false;
+        this.element.style.opacity = this._opacity || '';
+        if (this._padding !== null) { this.element.style.paddingLeft = this._padding; this._padding = null; }
+        await quiet(call('glass.remove', this.id));
+      }
+    }
+    // The native button shows the symbol next to the title: widen the element so the title still fits.
+    _makeRoom() {
+      var o = this.options, el = this.element;
+      var needs = !!(o.symbol && o.title);
+      if (needs && this._padding === null) {
+        this._padding = el.style.paddingLeft;
+        el.style.paddingLeft = 'calc(' + getComputedStyle(el).paddingLeft + ' + ' + Math.round(o.fontSize * 1.5) + 'px)';
+      } else if (!needs && this._padding !== null) {
+        el.style.paddingLeft = this._padding;
+        this._padding = null;
+      }
+    }
+    _frameIfChanged() {
+      if (!this.native) return null;
+      var frame = glassFrameOf(this.element);
+      var key = JSON.stringify(frame);
+      if (key === this._key) return null;
+      this._key = key;
+      return Object.assign({ id: this.id }, frame);
+    }
+    _tapped() {
+      if (this._raw.click === false) this.emit('tap'); else this.element.click();
+    }
+  }
+
+  bus.on('glass.tap', function (d) { var b = d && glassButtons.get(d.id); if (b) b._tapped(); });
+
+  var glassWarned = false;
+  var glass = {
+    /** true when Aura draws the buttons (false: CSS fallback). */
+    get native() { return glassNative(); },
+    /** true when the buttons are real Liquid Glass (iOS 26 or later). */
+    get liquid() { return glassNative() && !!env.caps.liquidGlass; },
+    /** Puts a native glass button over an element. options: { title, symbol, style: 'regular' | 'prominent' |
+     * 'clear' | 'prominentClear', tint, color, fontSize, cornerRadius, click (false: no element.click()) }.
+     * Resolves to a GlassButton (events: tap). */
+    attach: async function (el, options) {
+      if (typeof el === 'string') el = document.querySelector(el);
+      if (!el) throw new Error('AuraKit.experimental.glass.attach(): element not found.');
+      if (!glassWarned) { glassWarned = true; console.info('[AuraKit] glass buttons are experimental.'); }
+      await ready();
+      var existing = null;
+      glassButtons.forEach(function (b) { if (b.element === el) existing = b; });
+      if (existing) return existing.update(options || {});
+      return new GlassButton(el, options || {})._start();
+    },
+    /** attach() for every element matching the selector (default [data-aura-glass]). */
+    attachAll: function (selector, root) {
+      var list = Array.from((root || document).querySelectorAll(selector || '[data-aura-glass]'));
+      return Promise.all(list.map(function (el) { return glass.attach(el); }));
+    },
+    /** Every attached button. */
+    buttons: function () { return Array.from(glassButtons.values()); },
+    /** Removes them all. */
+    clear: function () { return Promise.all(glass.buttons().map(function (b) { return b.remove(); })); },
+    /** Sends every frame again (after moving elements in a way AuraKit cannot see). */
+    refresh: function () { glassButtons.forEach(function (b) { b._key = ''; }); glassSchedule(); },
+    Button: GlassButton,
+  };
+  // <button data-aura-glass> … are attached by themselves.
+  (function autoGlass() {
+    var go = function () { if (document.querySelector('[data-aura-glass]')) glass.attachAll().catch(function (e) { console.warn('[AuraKit] glass:', e.message); }); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else setTimeout(go, 0);
+  })();
 
   // ------------------------------------------------------------------ Camera / torch
   var camera = {
@@ -1078,6 +1270,8 @@
     statusBar: statusBar,
     orientation: orientation,
     volumeButtons: volumeButtons,
+    /** Features that may change or not work everywhere yet. */
+    experimental: { glass: glass },
     camera: camera,
     ble: ble,
     link: link,

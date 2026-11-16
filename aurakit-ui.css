@@ -101,3 +101,18 @@ html.ak-in-aura .ak-hide-in-aura, html.ak-connected .ak-hide-connected { display
 .ak-kv { font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-all; margin: 0; -webkit-user-select: text; user-select: text; }
 .ak-list a { color: var(--ak-text); text-decoration: none; flex: 1; display: flex; justify-content: space-between; }
 .ak-list a::after { content: "›"; color: var(--ak-muted); }
+
+/* EXPERIMENTAL glass buttons (AuraKit.experimental.glass): look of the element when Aura cannot draw the
+   native Liquid Glass button (plain browser, iframe, older Aura). Inside Aura the element is made transparent
+   and the native button sits on top of it. */
+.ak-glass {
+  -webkit-backdrop-filter: blur(14px) saturate(1.8);
+  backdrop-filter: blur(14px) saturate(1.8);
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+.ak-glass[data-aura-glass="clear"], .ak-glass[data-aura-glass="prominentClear"] { background: rgba(255, 255, 255, 0.06); }
+.ak-glass[data-aura-glass="prominent"] { background: var(--ak-accent, #0a84ff); }

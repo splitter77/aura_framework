@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Liquid Glass (experimental)">Liquid Glass (expérimental)</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    body.ak {
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-bottom: 120px;
+      background:
+        radial-gradient(circle at 15% 20%, #ff375f 0, transparent 35%),
+        radial-gradient(circle at 85% 35%, #0a84ff 0, transparent 40%),
+        radial-gradient(circle at 30% 75%, #30d158 0, transparent 35%),
+        radial-gradient(circle at 80% 90%, #ff9f0a 0, transparent 35%),
+        #111;
+      background-attachment: fixed;
+    }
+    .glass-row { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+    .glass-row button { height: 50px; padding: 0 20px; border: 0; font-size: 17px; }
+    .stripes { height: 140px; border-radius: 16px; margin: 12px 0;
+      background: repeating-linear-gradient(45deg, #fff 0 14px, #000 14px 28px); display: flex; align-items: center; justify-content: center; }
+    .stripes button { height: 56px; padding: 0 28px; border: 0; font-size: 19px; }
+    #moving { height: 50px; padding: 0 20px; border: 0; font-size: 17px; animation: slide 3s ease-in-out infinite alternate; }
+    @keyframes slide { from { transform: translateX(0); } to { transform: translateX(140px); } }
+    .toolbar { position: fixed; left: 16px; right: 16px; bottom: max(20px, env(safe-area-inset-bottom)); display: flex; gap: 12px; justify-content: center; }
+    .toolbar button { width: 64px; height: 64px; border: 0; font-size: 26px; }
+    #taps { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Liquid Glass">Liquid Glass</h1>
+  <p class="ak-muted" data-en="Experimental. Aura draws native buttons (Liquid Glass on iOS 26, a blur before) over the HTML buttons below. Outside Aura they keep a CSS glass look.">Expérimental. Aura dessine des boutons natifs (Liquid Glass sur iOS 26, un flou avant) par-dessus les boutons HTML ci-dessous. Hors d'Aura, ils gardent un aspect verre en CSS.</p>
+  <div class="ak-card"><pre class="ak-kv" id="state">…</pre><p>Taps : <b id="taps">0</b> · <span id="last">—</span></p></div>
+
+  <h2 data-en="Styles">Styles</h2>
+  <div class="glass-row">
+    <button data-aura-glass data-aura-symbol="sparkles" data-en="Regular">Normal</button>
+    <button data-aura-glass="prominent" data-aura-tint="#0a84ff" data-en="Prominent">Proéminent</button>
+    <button data-aura-glass="clear" data-en="Clear">Clair</button>
+    <button data-aura-glass="prominentClear" data-aura-tint="#ff375f" data-en="Prominent clear">Proéminent clair</button>
+  </div>
+
+  <h2 data-en="Over a busy background">Sur un fond chargé</h2>
+  <div class="stripes"><button data-aura-glass data-aura-symbol="eye" data-en="Reveal">Révéler</button></div>
+
+  <h2 data-en="Changed from JavaScript">Modifié en JavaScript</h2>
+  <div class="glass-row">
+    <button id="counter" data-en="Count: 0">Compteur : 0</button>
+    <button id="toggleTint" data-aura-glass data-en="Change the colour">Changer la couleur</button>
+  </div>
+
+  <h2 data-en="Moving (known limit: it lags)">En mouvement (limite connue : retard)</h2>
+  <div class="glass-row"><button id="moving" data-aura-glass data-en="I move">Je bouge</button></div>
+
+  <h2 data-en="Scroll">Défilement</h2>
+  <p class="ak-muted" data-en="Scroll: the buttons in the page scroll with it, the bar at the bottom stays fixed.">Faites défiler : les boutons de la page défilent avec elle, la barre du bas reste fixe.</p>
+  <div style="height: 700px"></div>
+  <div class="glass-row">
+    <button data-aura-glass data-aura-symbol="arrow.up" data-en="Back to the top" onclick="scrollTo({ top: 0, behavior: 'smooth' })">Remonter</button>
+    <button id="removeAll" class="ak-btn" data-en="Remove the glass buttons">Retirer les boutons glass</button>
+  </div>
+
+  <div class="toolbar">
+    <button data-aura-glass data-aura-symbol="heart.fill" data-aura-title="" data-aura-tint="#ff375f" aria-label="like">♥</button>
+    <button data-aura-glass="prominent" data-aura-symbol="plus" data-aura-title="" aria-label="add">+</button>
+    <button data-aura-glass data-aura-symbol="star.fill" data-aura-title="" data-aura-tint="#ffd60a" aria-label="star">★</button>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const glass = AuraKit.experimental && AuraKit.experimental.glass;
+    if (!glass) $('state').textContent = t('aurakit.js est trop ancien (pas de AuraKit.experimental.glass) : rechargez la page.', 'aurakit.js is too old (no AuraKit.experimental.glass): reload the page.');
+    let taps = 0;
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.id === 'removeAll') return;
+      $('taps').textContent = ++taps;
+      $('last').textContent = b.getAttribute('aria-label') || b.textContent.trim();
+      AuraKit.haptics.light();
+    });
+
+    if (glass) (async () => {
+      const env = await AuraKit.ready();
+      $('state').textContent = JSON.stringify({ available: env.available, native: glass.native, liquidGlass: glass.liquid,
+        reason: env.reason || undefined }, null, 2);
+
+      // A button attached from JavaScript, with its own tap handler
+      let count = 0;
+      const counter = await glass.attach($('counter'), { symbol: 'number', click: false });
+      counter.on('tap', () => { count++; counter.update({ title: t('Compteur : ', 'Count: ') + count }); $('counter').textContent = t('Compteur : ', 'Count: ') + count; });    })();
+
+    const tints = ['#30d158', '#ff9f0a', '#bf5af2', null];
+    let tintIndex = 0;
+    $('toggleTint').addEventListener('click', async () => {
+      const button = glass && glass.buttons().find((b) => b.element === $('toggleTint'));
+      if (button) await button.update({ style: 'prominent', tint: tints[tintIndex++ % tints.length] || '#0a84ff' });
+    });
+    $('removeAll').onclick = () => glass && glass.clear();
+  </script>
+</body>
+</html>
