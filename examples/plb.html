@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Aura PLB</title>
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); background: #000; color: #eee; font: 16px -apple-system, system-ui, sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8e8e93; margin: 0 0 8px; font-weight: 600; }
+    section { background: #1c1c1e; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    button, input { font: inherit; border-radius: 8px; border: 0; padding: 10px 12px; }
+    button { background: #0a84ff; color: #fff; }
+    button.secondary { background: #3a3a3c; }
+    button.danger { background: #3a1d1d; color: #ff9f99; }
+    input[type=text], input[type=number] { background: #2c2c2e; color: #fff; width: 100%; box-sizing: border-box; }
+    input[type=range] { width: 100%; padding: 0; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+    .row > * { flex: 1; }
+    .hint { font-size: 14px; color: #8e8e93; margin: 8px 0 0; }
+    #status { font-size: 14px; color: #8e8e93; margin-left: 8px; }
+    #pad { display: grid; place-items: center; height: 120px; border-radius: 60px; background: #2c2c2e; color: #8e8e93; font-weight: 600; font-size: 18px; transition: background .08s, color .08s; }
+    #pad.down { background: #0a84ff; color: #fff; }
+    #pad.long { background: #ff9f0a; color: #000; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; margin-top: 8px; }
+    .stats div { background: #2c2c2e; border-radius: 8px; padding: 8px; overflow-wrap: anywhere; }
+    .stats b { display: block; color: #8e8e93; font: 600 11px -apple-system, system-ui, sans-serif; text-transform: uppercase; margin-bottom: 2px; }
+    label.check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 15px; }
+    #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; -webkit-user-select: text; user-select: text; }
+    [disabled] { opacity: .4; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    nav.lang { display: flex; gap: 2px; flex: 0 0 auto; }
+    nav.lang button { background: none; color: #8e8e93; padding: 4px 6px; font-size: 14px; }
+    nav.lang button[aria-current="true"] { color: #fff; font-weight: 600; }
+    #error { display: none; background: #3a1d1d; color: #ff9f99; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Aura PLB <span id="status" data-en="disconnected">déconnecté</span></h1>
+    <nav class="lang"><button data-set-lang="fr">FR</button><button data-set-lang="en">EN</button></nav>
+  </header>
+  <div id="error" role="alert"></div>
+
+  <section>
+    <button id="connect" data-en="Connect the PLB">Connecter le PLB</button>
+    <button id="disconnect" class="secondary" disabled data-en="Disconnect">Déconnecter</button>
+    <p class="hint" data-en="Hold the PLB's button down until it says connected: a PLB with no app connected is only awake while its button is held.">Maintenez le bouton du PLB appuyé jusqu'à « connecté » : sans application connectée, le PLB ne reste allumé que tant que son bouton est enfoncé.</p>
+  </section>
+
+  <section>
+    <h2 data-en="Button">Bouton</h2>
+    <div id="pad" data-en="released">relâché</div>
+    <div class="stats">
+      <div><b data-en="Presses">Appuis</b><span id="pushes">0</span></div>
+      <div><b data-en="Long">Longs</b><span id="longs">0</span></div>
+      <div><b data-en="Last press">Dernier appui</b><span id="duration">—</span></div>
+    </div>
+    <label class="check"><input id="direct" type="checkbox" data-needs> <span data-en="Light while the button is held">Allumer la lumière tant que le bouton est appuyé</span></label>
+  </section>
+
+  <section>
+    <h2 data-en="Light">Lumière</h2>
+    <label><span data-en="Level">Intensité</span> <span id="levelText">100 %</span>
+      <input id="level" type="range" min="1" max="100" value="100" data-needs></label>
+    <div class="row">
+      <button id="on" data-needs data-en="Turn on">Allumer</button>
+      <button id="off" class="secondary" data-needs data-en="Turn off">Éteindre</button>
+      <button id="blink" class="secondary" data-needs data-en="Flash ×3">Flash ×3</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>PLB</h2>
+    <div class="stats">
+      <div><b data-en="Battery">Batterie</b><span id="batt">—</span></div>
+      <div><b>Firmware</b><span id="ver">—</span></div>
+      <div><b data-en="Address">Adresse</b><span id="addr">—</span></div>
+    </div>
+    <div class="row">
+      <button id="info" class="secondary" data-needs data-en="Read">Lire</button>
+    </div>
+    <div class="row">
+      <label><span data-en="Auto-off (s, ≥ 60)">Extinction auto (s, ≥ 60)</span>
+        <input id="autoOff" type="number" min="60" step="60" placeholder="3600" data-needs></label>
+      <button id="saveAutoOff" class="secondary" data-needs data-en="Save" style="flex:0 0 auto; align-self:flex-end">Enregistrer</button>
+    </div>
+    <label class="check"><input id="keepAwake" type="checkbox" data-needs> <span data-en="Keep awake (empty command every 30 s)">Garder éveillé (commande vide toutes les 30 s)</span></label>
+    <div class="row">
+      <button id="restart" class="danger" data-needs data-en="Restart">Redémarrer</button>
+      <button id="powerOff" class="danger" data-needs data-en="Turn off the PLB">Éteindre le PLB</button>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-en="Raw command">Commande brute</h2>
+    <div class="row">
+      <input id="raw" type="text" placeholder="GET_VER" autocapitalize="characters" autocomplete="off" data-needs>
+      <button id="sendRaw" class="secondary" data-needs data-en="Send" style="flex:0 0 auto">Envoyer</button>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-en="Log">Journal</h2>
+    <div id="log"></div>
+  </section>
+
+  <script src="../aurakit-mock.js"></script>
+  <script src="../devices/aura-plb.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    if (typeof window.t !== 'function') window.t = (fr) => fr;
+    if (typeof AuraPLB === 'undefined') {
+      $('error').textContent = 'Script introuvable / missing: aura-plb.js';
+      $('error').style.display = 'block';
+      throw new Error('Missing aura-plb.js');
+    }
+    const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent; };
+    const STATES = {
+      permission: t('autorisation Bluetooth…', 'Bluetooth permission…'), scanning: t('recherche… (maintenez le bouton)', 'searching… (hold the button)'),
+      connecting: t('connexion…', 'connecting…'), connected: t('connecté', 'connected'),
+      reconnecting: t('en attente du PLB… (maintenez le bouton)', 'waiting for the PLB… (hold the button)'), disconnected: t('déconnecté', 'disconnected'),
+    };
+    let plb = null;
+    let pushes = 0, longs = 0;
+
+    const setConnected = (on) => {
+      document.querySelectorAll('[data-needs]').forEach((el) => { el.disabled = !on; });
+      // A PLB object that was not disconnected by hand is connected, connecting or waiting to reconnect.
+      const active = !!(plb && !plb._manual);
+      $('connect').disabled = active;
+      $('disconnect').disabled = !active;
+    };
+    setConnected(false);
+    const showError = (msg) => { $('error').textContent = msg || ''; $('error').style.display = msg ? 'block' : 'none'; };
+    const run = (fn) => async () => { try { await fn(); } catch (e) { showError(e.message); log('⚠️ ' + e.message); } };
+    const pad = (cls, text) => { $('pad').className = cls; $('pad').textContent = text; };
+
+    $('connect').onclick = run(async () => {
+      showError('');
+      if (plb) await plb.disconnect();
+      plb = new AuraPLB({ lang: AuraI18n.lang, keepAwake: $('keepAwake').checked });
+      plb.on('status', ({ state, name, attempt }) => {
+        $('status').textContent = (STATES[state] || state) + (name ? ' · ' + name : '');
+        setConnected(state === 'connected');
+        if (state === 'connected') showError('');
+        if (state !== 'scanning' && state !== 'reconnecting') log(t('état : ', 'state: ') + (STATES[state] || state) + (name ? ' (' + name + ')' : ''));
+        else if (state === 'reconnecting' && attempt === 1) log(STATES.reconnecting);
+      });
+      plb.on('connect', () => readInfo().catch((e) => log('⚠️ ' + e.message)));
+      plb.on('push', () => {
+        pad('down', t('appuyé', 'pressed'));
+        $('pushes').textContent = ++pushes;
+        if ($('direct').checked) plb.light($('level').value).catch(() => {});
+      });
+      plb.on('longpress', () => { pad('long', t('appui long', 'long press')); $('longs').textContent = ++longs; });
+      plb.on('release', ({ duration, long }) => {
+        pad('', t('relâché', 'released'));
+        $('duration').textContent = duration + ' ms';
+        log((long ? t('appui long', 'long press') : t('appui', 'press')) + ' · ' + duration + ' ms');
+        if ($('direct').checked) plb.lightOff().catch(() => {});
+      });
+      plb.on('message', ({ text }) => log('← ' + text));
+      $('connect').disabled = true;
+      try { await plb.connect(); }
+      catch (e) { $('status').textContent = STATES.disconnected; plb = null; setConnected(false); throw e; }
+    });
+
+    $('disconnect').onclick = run(async () => { await plb.disconnect(); $('status').textContent = STATES.disconnected; setConnected(false); });
+
+    $('level').oninput = () => { $('levelText').textContent = $('level').value + ' %'; };
+    $('level').onchange = run(async () => { if (plb.level) await plb.light($('level').value); });
+    $('on').onclick = run(() => plb.light($('level').value));
+    $('off').onclick = run(() => plb.lightOff());
+    $('blink').onclick = run(async () => {
+      for (let i = 0; i < 3; i++) {
+        await plb.light($('level').value);
+        await new Promise((r) => setTimeout(r, 150));
+        await plb.lightOff();
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    });
+
+    const readInfo = async () => {
+      const b = await plb.batteryStatus();
+      $('batt').textContent = b.millivolts + ' mV' + (b.low ? t(' (faible)', ' (low)') : '');
+      const f = await plb.firmware();
+      $('ver').textContent = f.version;
+      log('firmware ' + f.version + ' · ' + f.build);
+      $('addr').textContent = await plb.address();
+      $('autoOff').value = await plb.autoOff();
+    };
+    $('info').onclick = run(readInfo);
+    $('saveAutoOff').onclick = run(async () => {
+      const s = await plb.autoOff(Number($('autoOff').value) || 3600);
+      $('autoOff').value = s;
+      log(t('extinction auto : ', 'auto-off: ') + s + ' s');
+    });
+    $('keepAwake').onchange = () => {
+      if (!plb) return;
+      plb.setKeepAwake($('keepAwake').checked);
+    };
+    $('restart').onclick = run(() => plb.restart());
+    $('powerOff').onclick = run(async () => { await plb.powerOff(); $('status').textContent = STATES.disconnected; setConnected(false); });
+
+    const sendRaw = run(async () => {
+      const cmd = $('raw').value.trim();
+      if (!cmd) return;
+      log('→ ' + cmd);
+      await plb.send(cmd);
+    });
+    $('sendRaw').onclick = sendRaw;
+    $('raw').onkeydown = (e) => { if (e.key === 'Enter') sendRaw(); };
+
+    log(t('Commandes : GET_VER, GET_ADD, GET_BATT=, TMROFF=?, LAMPPWM=50, GETCFG_X, PWROFF, RESTART',
+      'Commands: GET_VER, GET_ADD, GET_BATT=, TMROFF=?, LAMPPWM=50, GETCFG_X, PWROFF, RESTART'));
+    if (window.Aura && window.Aura.__mock) log(t('Simulateur : maintenez la touche B pour appuyer sur le bouton du PLB.', 'Simulator: hold the B key to press the PLB button.'));
+    if (!AuraPLB.isAvailable()) showError(t('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.',
+      'Open this page in Aura (HTTPS, bookmarked domain), or add ?mock=host for the simulator.'));
+  </script>
+</body>
+</html>

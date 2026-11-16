@@ -386,6 +386,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Proximity: press **P** to cover / uncover the sensor while it is watched.
 - Bluetooth: one device, **Mock Sensor** (`id` `MOCK-BLE-0001`, service `FFE0`, characteristic `FFE1`: read returns the last value written, notifications send a counter every second).
 - Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
+- Bluetooth: a PLB, **MA_Pouce_M0CK01** (`id` `MOCK-PLB-0001`), that answers the PLB text commands: hold **B** to press its button (held one second: long press).
 - `deviceInfo()` returns fake identifiers.
 - `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
 
@@ -393,7 +394,7 @@ The tabs share `localStorage`: a room code saved in one tab is used by the other
 
 ## 15. Device drivers: `devices/`
 
-`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) and `devices/aura-nova.js` (**Nova Pen**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
+`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) `devices/aura-nova.js` (**Nova Pen**, below) and `devices/aura-plb.js` (**PLB**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
 
 ```js
 const atom = await AuraAtom.connect({ timeout: 15, lang: 'en' });
@@ -433,6 +434,42 @@ The pen does not advertise its service, so `connect()` scans without a filter an
 | `toSVG({ color, strokeWidth, margin })` | The ink as SVG, in millimetres. |
 
 Events: `point`, `down` (first point of a stroke), `up` (`{ stroke }`), `stroke` (the finished points), `page`, `change`, `stats` (every second), `discovered` (each device seen while scanning), `status` (`scanning`, `connecting`, `connected`, `reconnecting`, `disconnected`), `connect`, `disconnect`. The decoder is exposed for tests: `AuraNova.decodeFrame`, `AuraNova.FrameAssembler`, `AuraNova.StreamProcessor`.
+
+### PLB: `devices/aura-plb.js`
+
+`AuraPLB` drives the **PLB**, Marc-Antoine's thumb button with a light (nRF52, firmware 010). Demo: `examples/plb.html`.
+
+```js
+const plb = await AuraPLB.connect({ lang: 'en' });   // hold the PLB's button meanwhile
+plb.on('push', () => console.log('pressed'));
+plb.on('release', ({ duration, long }) => console.log('released after', duration, 'ms'));
+plb.on('longpress', () => console.log('held one second'));
+await plb.light(60);                                   // 60 %; light(0) turns it off
+console.log(await plb.battery(), 'mV');
+```
+
+The PLB is named `MA_Pouce_XXXXXX` and speaks text over the Nordic UART Service (`6E400001-…`): commands written to `6E400002` end with `\n`, answers come on `6E400003` as `<answer>\r\nOK\r\n`, and the button sends `+BTN: PUSH`, `+BTN: RELEASE` and `+BTN: LONG` with no line ending. Power behaviour, read from the firmware:
+
+- With no app connected, the PLB is only awake while its button is held, and the light turns on after 200 ms. **Hold the button until the page is connected.** Connecting turns the light off, and from then on the button only sends events: the page decides what the light does.
+- Once connected it stays on until `autoOff` seconds pass with no press and no command (1 hour by default), `powerOff()`, or the disconnection: a disconnected PLB turns itself off. With `autoReconnect`, the page connects again the next time someone holds the button.
+- It turns itself off under 2850 mV; under 2950 mV the battery is low.
+
+| Member | Meaning |
+| --- | --- |
+| `connect(options)` | `timeout` (20 s), `name` (exact name instead of the hints `MA_POUCE`, `PLB`), `autoReconnect` (`true`), `keepAwake` (`false`, `true` = every 30 s, or seconds), `lang`. |
+| `disconnect()` | Disconnects and stops reconnecting (the PLB then turns itself off). |
+| `light(percent)` / `lightOff()` | Light level 1 to 100 %, 0 = off. Resolves with the level applied. |
+| `battery()` / `batteryStatus()` | Millivolts / `{ millivolts, low }`. |
+| `firmware()` | `{ version: '010', build: 'Aug 24 2025 12:00:00' }`. |
+| `address()` | Bluetooth address, 12 hex digits. |
+| `autoOff(seconds?)` | Reads, or sets and saves, the auto-off delay (at least 60 s). |
+| `config()` | Stored configuration: `{ version, autoOff, channel, buttonIds }`. |
+| `setKeepAwake(value)` | Sends an empty command periodically so the auto-off never fires. |
+| `powerOff()` / `restart()` / `factoryReset()` | `PWROFF`, `RESTART` (the PLB then sleeps unless its button is held), `FACT_RESET`. |
+| `send(command)` / `query(command, prefix)` | Raw command / raw command and its answer. |
+| `connected`, `pressed`, `level`, `name` | Connection, button held, last light level, PLB name. |
+
+Events: `push`, `release` (`{ duration, long }`), `longpress` (`{ duration }`), `click` (release of a press that was not long), `button` (all, with `{ event }`), `message` (`{ text }`, every answer), `data` (raw text), `discovered`, `status` (`permission`, `scanning`, `connecting`, `connected`, `reconnecting`, `disconnected`), `connect`, `disconnect`. The parser is exposed for tests: `AuraPLB.StreamParser`, `AuraPLB.parseConfig`.
 
 ## 16. Wire format
 
