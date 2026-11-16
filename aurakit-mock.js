@@ -6,6 +6,7 @@
  * Open two tabs of the same browser (one host, one join): Aura.peer goes through BroadcastChannel,
  * so the iPhone-to-iPhone link, messages, shared state and rooms work between the tabs.
  * Haptics are logged to the console. Press P to toggle the proximity sensor while it is watched.
+ * Volume buttons: press + (or =) and - while they are watched. Status bar and rotation lock are logged.
  * Bluetooth LE: "Mock Sensor", with a counter notifying every second (service FFE0, characteristic FFE1),
  * "60BP-MOCK", a Nova pen that writes a random number on a new sheet every few seconds (devices/aura-nova.js),
  * and "MA_Pouce_M0CK01", a PLB thumb button (devices/aura-plb.js): hold B to press its button. */
@@ -73,6 +74,22 @@
     near = !near;
     log('proximity', near ? 'near' : 'far');
     emit('proximity', { near: near });
+  });
+
+  // ---------------------------------------------------------------- status bar, rotation, volume buttons (+ / -)
+  var bar = { hidden: appClip, transparent: true };
+  var lockedOrientation = null;
+  var currentOrientation = function () {
+    return window.matchMedia && window.matchMedia('(orientation: landscape)').matches ? 'landscapeRight' : 'portrait';
+  };
+  var ORIENTATIONS = ['portrait', 'landscape', 'landscapeLeft', 'landscapeRight', 'current'];
+  var volumeOn = false, volume = 0.5;
+  window.addEventListener('keydown', function (e) {
+    if (!volumeOn || /input|textarea/i.test((e.target && e.target.tagName) || '')) return;
+    var button = e.key === '+' || e.key === '=' ? 'up' : e.key === '-' ? 'down' : null;
+    if (!button) return;
+    log('volume button', button);
+    emit('volumeButton', { button: button, volume: volume });
   });
 
   // ---------------------------------------------------------------- fake Bluetooth devices
@@ -230,7 +247,8 @@
     __mock: true,
     version: 1,
     capabilities: function () {
-      return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true });
+      return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true,
+        statusBar: true, orientationLock: true, volumeButtons: true });
     },
     deviceInfo: function () {
       return ok({ userId: appClip ? 'MOCK-TAG-ID' : 'MOCK-USER-ID', vendorId: 'MOCK-' + me, model: 'Simulator', systemName: 'Web', systemVersion: '1', appClip: appClip });
@@ -242,6 +260,37 @@
     proximity: {
       start: function () { proxOn = true; log('proximity watched — press P to cover / uncover the sensor'); return ok({ supported: true, near: near }); },
       stop: function () { proxOn = false; return ok(); },
+    },
+    statusBar: {
+      set: function (o) {
+        o = o || {};
+        if (typeof o.hidden === 'boolean') bar.hidden = o.hidden;
+        if (typeof o.transparent === 'boolean') bar.transparent = o.transparent;
+        log('status bar', bar.hidden ? 'hidden' : 'shown' + (bar.transparent ? ' (transparent)' : ' (opaque)'));
+        return ok({ hidden: bar.hidden, transparent: bar.transparent, fullScreen: true });
+      },
+      show: function (o) { return Aura.statusBar.set(Object.assign({}, o, { hidden: false })); },
+      hide: function () { return Aura.statusBar.set({ hidden: true }); },
+      get: function () { return ok({ hidden: bar.hidden, transparent: bar.transparent, fullScreen: true }); },
+    },
+    orientation: {
+      lock: function (name) {
+        name = name || 'current';
+        if (ORIENTATIONS.indexOf(name) < 0) return fail('Aura: unknown orientation "' + name + '".');
+        lockedOrientation = name === 'current' ? currentOrientation() : name;
+        log('rotation locked:', lockedOrientation);
+        return ok({ orientation: currentOrientation(), locked: lockedOrientation });
+      },
+      unlock: function () { lockedOrientation = null; log('rotation unlocked'); return ok({ orientation: currentOrientation(), locked: null }); },
+      get: function () { return ok({ orientation: currentOrientation(), locked: lockedOrientation }); },
+    },
+    volumeButtons: {
+      start: function (o) {
+        volumeOn = true;
+        log('volume buttons watched — press + and - (keepVolume: ' + !(o && o.keepVolume === false) + ')');
+        return ok({ volume: volume, keepVolume: !(o && o.keepVolume === false) });
+      },
+      stop: function () { volumeOn = false; return ok(); },
     },
     bluetooth: {
       state: function () { return ok('poweredOn'); },

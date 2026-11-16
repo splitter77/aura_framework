@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Screen and buttons">Écran et boutons</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    body { padding-top: max(16px, env(safe-area-inset-top)); }
+    .ak-row .ak-btn { flex: 1; }
+    #presses { font-size: 48px; text-align: center; padding: 8px; font-variant-numeric: tabular-nums; }
+    #last { text-align: center; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Screen and buttons">Écran et boutons</h1>
+
+  <h2 data-en="Status bar">Barre d'état</h2>
+  <div class="ak-card">
+    <div class="ak-row">
+      <button class="ak-btn" id="barHide" data-en="Hide">Masquer</button>
+      <button class="ak-btn" id="barShow" data-en="Show">Afficher</button>
+      <button class="ak-btn" id="barOpaque" data-en="Show (opaque)">Afficher (opaque)</button>
+    </div>
+    <pre class="ak-kv" id="barState">…</pre>
+    <p class="ak-muted" data-en="Only in full screen (App Clip, or full-screen mode in Aura Browser). The bookmark's setting comes back on the next page.">Seulement en plein écran (App Clip, ou mode plein écran d'Aura Browser). Le réglage du favori revient à la page suivante.</p>
+  </div>
+
+  <h2 data-en="Rotation">Rotation</h2>
+  <div class="ak-card">
+    <div class="ak-row">
+      <button class="ak-btn" id="lockCurrent" data-en="Lock as is">Bloquer ainsi</button>
+      <button class="ak-btn" id="lockPortrait" data-en="Portrait">Portrait</button>
+      <button class="ak-btn" id="lockLandscape" data-en="Landscape">Paysage</button>
+      <button class="ak-btn" id="unlock" data-en="Unlock">Débloquer</button>
+    </div>
+    <pre class="ak-kv" id="rotState">…</pre>
+  </div>
+
+  <h2 data-en="Volume buttons">Boutons de volume</h2>
+  <div class="ak-card">
+    <div id="presses">0</div>
+    <p class="ak-muted" id="last">—</p>
+    <label class="ak-muted"><input type="checkbox" id="keep" checked> <span data-en="Keep the volume (no iOS indicator)">Garder le volume (pas d'indicateur iOS)</span></label>
+    <button class="ak-btn" id="volBtn" style="width:100%" data-en="Watch the buttons">Surveiller les boutons</button>
+    <p class="ak-muted" data-en="Volume up: success haptic. Volume down: tap. The press is also sent to the other iPhone.">Volume + : vibration « succès ». Volume − : tap. L'appui est aussi envoyé à l'autre iPhone.</p>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const link = AuraKit.link();
+    const show = (el, value) => { $(el).textContent = JSON.stringify(value, null, 2); };
+    const run = async (el, fn) => { try { show(el, await fn()); } catch (e) { AuraUI.toast(e.message); } };
+
+    (async () => {
+      const env = await AuraKit.ready();
+      if (!env.available) { show('barState', env.reason); show('rotState', env.reason); return; }
+      run('barState', () => AuraKit.statusBar.get());
+      run('rotState', () => AuraKit.orientation.get());
+    })();
+
+    $('barHide').onclick = () => run('barState', () => AuraKit.statusBar.hide());
+    $('barShow').onclick = () => run('barState', () => AuraKit.statusBar.show({ transparent: true }));
+    $('barOpaque').onclick = () => run('barState', () => AuraKit.statusBar.show({ transparent: false }));
+
+    $('lockCurrent').onclick = () => run('rotState', () => AuraKit.orientation.lock());
+    $('lockPortrait').onclick = () => run('rotState', () => AuraKit.orientation.lock('portrait'));
+    $('lockLandscape').onclick = () => run('rotState', () => AuraKit.orientation.lock('landscape'));
+    $('unlock').onclick = () => run('rotState', () => AuraKit.orientation.unlock());
+
+    let watcher = null, presses = 0;
+    $('volBtn').onclick = async () => {
+      if (watcher) { watcher.stop(); watcher = null; $('volBtn').textContent = t('Surveiller les boutons', 'Watch the buttons'); return; }
+      try {
+        watcher = await AuraKit.volumeButtons.watch(({ button }) => {
+          $('presses').textContent = ++presses;
+          $('last').textContent = button === 'up' ? t('Volume +', 'Volume up') : t('Volume −', 'Volume down');
+          if (button === 'up') AuraKit.haptics.success(); else AuraKit.haptics.tap();
+          link.send('volume', button);
+        }, { keepVolume: $('keep').checked });
+        $('volBtn').textContent = t('Arrêter', 'Stop');
+      } catch (e) { AuraUI.toast(e.message); }
+    };
+    link.onMessage('volume', (button) => AuraUI.toast(button === 'up'
+      ? t('L\'autre iPhone : volume +', 'Other iPhone: volume up')
+      : t('L\'autre iPhone : volume −', 'Other iPhone: volume down')));
+  </script>
+</body>
+</html>

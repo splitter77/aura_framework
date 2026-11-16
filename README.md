@@ -11,6 +11,9 @@ It is one script with no dependencies and no build step. It wraps the native `wi
 | `AuraKit.link()` | **Link between two iPhones** over Bluetooth: automatic pairing, automatic reconnection, typed messages, request/answer, sync on connect, **shared state**, and messages **larger than 64 KB**. |
 | `AuraKit.ble` | Bluetooth LE devices: scan, connect, read, write (with chunking), notifications, automatic reconnection. |
 | `AuraKit.proximity` | Proximity sensor. |
+| `AuraKit.statusBar` | Show or hide the iOS status bar at any time (`hide()`, `show()`, `toggle()`). |
+| `AuraKit.orientation` | Lock the screen rotation (`lock('portrait')`, `lock()` = as it is now, `unlock()`). |
+| `AuraKit.volumeButtons` | The volume buttons as triggers, without changing the volume or showing the iOS indicator. |
 | `AuraKit.camera` | Camera, torch, JPEG snapshots. |
 | `AuraKit.device()` | Device identifiers. |
 | iframes | A page inside an iframe gets the same API through its parent page (Aura itself does not answer iframes). |
@@ -83,7 +86,7 @@ Then open two tabs of the same browser:
 - `http://localhost:8770/examples/?mock=host` behaves like Aura Browser (host)
 - `http://localhost:8770/examples/?mock=join` behaves like the App Clip (guest)
 
-The link, messages, shared state, rooms and iframes work between the two tabs. Haptics are logged to the console. Press **P** to cover the proximity sensor. Bluetooth shows three fake devices: **Mock Sensor**, that sends a counter every second; **60BP-MOCK**, a Nova pen that writes a random number every few seconds; and **MA_Pouce_M0CK01**, a PLB whose button you press by holding **B**.
+The link, messages, shared state, rooms and iframes work between the two tabs. Haptics are logged to the console. Press **P** to cover the proximity sensor, **+** and **-** for the volume buttons. Bluetooth shows three fake devices: **Mock Sensor**, that sends a counter every second; **60BP-MOCK**, a Nova pen that writes a random number every few seconds; and **MA_Pouce_M0CK01**, a PLB whose button you press by holding **B**.
 
 ## Examples and templates
 
@@ -91,6 +94,7 @@ The link, messages, shared state, rooms and iframes work between the two tabs. H
 | --- | --- |
 | [`examples/haptics.html`](examples/haptics.html) | Every haptic, presets, Morse, played here or on the other iPhone |
 | [`examples/sensors.html`](examples/sensors.html) | Environment, device identifiers, proximity, camera, torch, photo sent to the other iPhone |
+| [`examples/screen.html`](examples/screen.html) | Status bar, rotation lock, volume buttons as triggers |
 | [`examples/bluetooth.html`](examples/bluetooth.html) | Scan, connect, notifications, write, PeekSmith |
 | [`examples/peek.html`](examples/peek.html) | AuraPeek: text, cards, brightness, rotation |
 | [`examples/aura_nova.html`](examples/aura_nova.html) | Nova Pen: live handwriting, SVG and OCR image export |

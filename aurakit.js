@@ -7,6 +7,9 @@
  *                         request/answer, state sync, shared state, messages larger than 64 KB
  *   AuraKit.ble           Bluetooth LE devices with notifications and automatic reconnection
  *   AuraKit.proximity     proximity sensor
+ *   AuraKit.statusBar     show or hide the iOS status bar at any time
+ *   AuraKit.orientation   lock the screen rotation
+ *   AuraKit.volumeButtons the volume buttons as triggers
  *   AuraKit.camera        camera, torch, snapshots
  *   AuraKit.device()      device identifiers
  *   AuraKit.quitAppClip() closes the App Clip
@@ -44,7 +47,7 @@
 
   // Every native event, re-emitted here (works the same in iframes).
   var EVENTS = ['peer.connected', 'peer.message', 'peer.disconnected', 'bluetooth.discovered',
-    'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity'];
+    'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity', 'volumeButton'];
   var bus = new Emitter();
   var native = function () { return window.Aura || null; };
   (function subscribeNative() {
@@ -56,6 +59,8 @@
   // ------------------------------------------------------------------ Calls (native or through the parent page)
   // Native functions an iframe may call through its parent page. The peer link goes through AuraKit.link() instead.
   var FRAME_CALLS = ['capabilities', 'deviceInfo', 'haptic', 'prepareHaptics', 'proximity.start', 'proximity.stop',
+    'statusBar.set', 'statusBar.get', 'orientation.lock', 'orientation.unlock', 'orientation.get',
+    'volumeButtons.start', 'volumeButtons.stop',
     'bluetooth.state', 'bluetooth.requestDevice', 'bluetooth.scan', 'bluetooth.stopScan', 'bluetooth.connect',
     'bluetooth.disconnect', 'bluetooth.read', 'bluetooth.write', 'bluetooth.startNotifications', 'bluetooth.stopNotifications'];
 
@@ -380,6 +385,78 @@
         },
       };
     },
+  };
+
+  // ------------------------------------------------------------------ Status bar, rotation, volume buttons
+  // These need Aura 1.9 or later: older versions do not list them in their capabilities.
+  async function requireCap(cap, what) {
+    var e = await ready();
+    if (!e.available) throw new Error('Aura is not available on this page.');
+    if (!e.caps || !e.caps[cap]) throw new Error(what + ' needs a newer version of Aura (update Aura Browser or the App Clip).');
+  }
+
+  var statusBar = {
+    /** Last known state (null until the first call). */
+    hidden: null,
+    transparent: null,
+    _apply: function (s) { if (s) { statusBar.hidden = !!s.hidden; statusBar.transparent = !!s.transparent; } return s; },
+    /** { hidden, transparent }: both optional. Resolves to { hidden, transparent, fullScreen }. */
+    set: async function (options) {
+      await requireCap('statusBar', 'AuraKit.statusBar');
+      var o = options || {}, args = {};
+      if (typeof o.hidden === 'boolean') args.hidden = o.hidden;
+      if (typeof o.transparent === 'boolean') args.transparent = o.transparent;
+      return statusBar._apply(await call('statusBar.set', args));
+    },
+    hide: function () { return statusBar.set({ hidden: true }); },
+    /** options: { transparent } — true: the page runs under the bar; false: the bar has its own band. */
+    show: function (options) { return statusBar.set(Object.assign({}, options, { hidden: false })); },
+    toggle: async function () { var s = await statusBar.get(); return statusBar.set({ hidden: !s.hidden }); },
+    get: async function () { await requireCap('statusBar', 'AuraKit.statusBar'); return statusBar._apply(await call('statusBar.get')); },
+  };
+
+  var orientation = {
+    /** Locked orientation, or null. */
+    locked: null,
+    _apply: function (s) { if (s) orientation.locked = s.locked || null; return s; },
+    /** 'portrait' | 'landscape' | 'landscapeLeft' | 'landscapeRight' | 'current' (default). Resolves to { orientation, locked }. */
+    lock: async function (name) {
+      await requireCap('orientationLock', 'AuraKit.orientation');
+      return orientation._apply(await call('orientation.lock', name || 'current'));
+    },
+    unlock: async function () { await requireCap('orientationLock', 'AuraKit.orientation'); return orientation._apply(await call('orientation.unlock')); },
+    get: async function () { await requireCap('orientationLock', 'AuraKit.orientation'); return orientation._apply(await call('orientation.get')); },
+  };
+
+  var volumeWatchers = new Set();
+  var volumeOptions = null;
+  var volumeButtons = {
+    /** fn({ button: 'up' | 'down', volume }) on each press. options: { keepVolume = true } — the volume
+     * stays where it is and iOS shows no volume indicator. Resolves to { volume, stop() }. */
+    watch: async function (fn, options) {
+      await requireCap('volumeButtons', 'AuraKit.volumeButtons');
+      var keepVolume = !(options && options.keepVolume === false);
+      var off = bus.on('volumeButton', fn);
+      volumeWatchers.add(off);
+      var r = null;
+      try {
+        // the native side runs once for every watcher: restart it only for the first one or a new option
+        if (volumeWatchers.size === 1 || volumeOptions !== keepVolume) r = await call('volumeButtons.start', { keepVolume: keepVolume });
+        volumeOptions = keepVolume;
+      } catch (err) { off(); volumeWatchers.delete(off); throw err; }
+      return {
+        volume: r ? r.volume : null,
+        stop: function () {
+          if (!volumeWatchers.has(off)) return;
+          off(); volumeWatchers.delete(off);
+          if (!volumeWatchers.size) { volumeOptions = null; quiet(call('volumeButtons.stop')); }
+        },
+      };
+    },
+    /** fn(detail) when volume up is pressed. Same options and result as watch(). */
+    onUp: function (fn, options) { return volumeButtons.watch(function (d) { if (d && d.button === 'up') fn(d); }, options); },
+    /** fn(detail) when volume down is pressed. */
+    onDown: function (fn, options) { return volumeButtons.watch(function (d) { if (d && d.button === 'down') fn(d); }, options); },
   };
 
   // ------------------------------------------------------------------ Camera / torch
@@ -989,7 +1066,7 @@
     get isAppClip() { return !!(env && env.appClip); },
     get isBrowser() { return !!(env && env.browser); },
     get inFrame() { return inFrame; },
-    /** Native events (bluetooth.*, proximity, peer.*). Returns off(). */
+    /** Native events (bluetooth.*, proximity, volumeButton, peer.*). Returns off(). */
     on: function (name, fn) { return bus.on(name, fn); },
     off: function (name, fn) { bus.off(name, fn); },
     /** Raw call: AuraKit.call('bluetooth.state'). */
@@ -998,6 +1075,9 @@
     haptic: function () { return haptics.play.apply(null, arguments); },
     device: device,
     proximity: proximity,
+    statusBar: statusBar,
+    orientation: orientation,
+    volumeButtons: volumeButtons,
     camera: camera,
     ble: ble,
     link: link,
