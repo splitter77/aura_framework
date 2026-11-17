@@ -112,10 +112,13 @@
   <script>
     const $ = (id) => document.getElementById(id);
     if (typeof window.t !== 'function') window.t = (fr) => fr;
-    if (typeof AuraPLB === 'undefined') {
-      $('error').textContent = 'Script introuvable / missing: aura-plb.js';
+    // If a script did not load (wrong path, file not uploaded), say so instead of failing silently.
+    const src = (name) => (document.querySelector('script[src*="' + name + '"]') || {}).src || name;
+    const missing = [typeof AuraI18n === 'undefined' && src('aurakit-i18n'), typeof AuraPLB === 'undefined' && src('aura-plb')].filter(Boolean);
+    if (missing.length) {
+      $('error').textContent = 'Script(s) introuvable(s) / missing: ' + missing.join(', ');
       $('error').style.display = 'block';
-      throw new Error('Missing aura-plb.js');
+      throw new Error('Missing ' + missing.join(', '));
     }
     const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent; };
     const STATES = {
