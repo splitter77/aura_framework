@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Contact and links">Contact et liens</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    body { padding-top: max(16px, env(safe-area-inset-top)); }
+    .ak-input { width: 100%; box-sizing: border-box; margin: 4px 0; }
+    .ak-row .ak-btn { flex: 1; }
+    a.ak-btn { text-align: center; text-decoration: none; }
+    #edge { text-align: center; font-size: 18px; padding: 10px 0; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Contact and links">Contact et liens</h1>
+  <span data-aura-status></span>
+
+  <h2 data-en="Business card">Carte de visite</h2>
+  <div class="ak-card">
+    <input class="ak-input" id="firstName" value="Marie" placeholder="Prénom" data-en-placeholder="First name" autocomplete="given-name">
+    <input class="ak-input" id="lastName" value="Dupont" placeholder="Nom" data-en-placeholder="Last name" autocomplete="family-name">
+    <input class="ak-input" id="org" value="Aura" placeholder="Société" data-en-placeholder="Company" autocomplete="organization">
+    <input class="ak-input" id="phone" value="+33 6 12 34 56 78" placeholder="Téléphone" data-en-placeholder="Phone" type="tel" autocomplete="tel">
+    <input class="ak-input" id="email" value="marie@example.com" placeholder="E-mail" type="email" autocomplete="email">
+    <input class="ak-input" id="url" value="https://example.com" placeholder="Site web" data-en-placeholder="Website" type="url">
+    <div class="ak-row" style="margin-top:8px">
+      <button class="ak-btn" id="save" data-en="Save the contact">Enregistrer le contact</button>
+      <a class="ak-btn" id="saveLink" data-en="Same, as a link">Pareil, en lien</a>
+    </div>
+    <p class="ak-muted" data-en="In Aura: the iOS contact card (Quick Look in the App Clip). Elsewhere: a .vcf file. The link works without the bridge, on any page opened in Aura.">Dans Aura : la fiche contact iOS (Quick Look dans l'App Clip). Ailleurs : un fichier .vcf. Le lien marche sans le pont, sur n'importe quelle page ouverte dans Aura.</p>
+  </div>
+
+  <h2 data-en="Links to other apps">Liens vers d'autres apps</h2>
+  <div class="ak-card">
+    <div class="ak-row">
+      <a class="ak-btn" id="whatsapp" href="whatsapp://send?text=Hello%20from%20Aura">WhatsApp</a>
+      <a class="ak-btn" href="shortcuts://" data-en="Shortcuts">Raccourcis</a>
+      <a class="ak-btn" href="sms:" data-en="Messages">Messages</a>
+    </div>
+    <p class="ak-muted" data-en="Plain links: Aura opens the app that handles the link. Nothing happens if the app is not installed.">De simples liens : Aura ouvre l'app qui gère le lien. Rien ne se passe si l'app n'est pas installée.</p>
+  </div>
+
+  <h2 data-en="Swipes from the edges">Glissements depuis les bords</h2>
+  <div class="ak-card">
+    <div id="edge">—</div>
+    <p class="ak-muted" data-en="In full screen, swipe from an edge of the screen: the page gets the swipe first, before Control Center or the notifications.">En plein écran, glissez depuis un bord de l'écran : la page reçoit le glissement en premier, avant le Centre de contrôle ou les notifications.</p>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const card = () => ({
+      firstName: $('firstName').value, lastName: $('lastName').value, org: $('org').value,
+      phone: $('phone').value, email: $('email').value, url: $('url').value,
+    });
+
+    const updateLink = () => { try { $('saveLink').href = AuraKit.contact.href(card()); } catch (e) { $('saveLink').removeAttribute('href'); } };
+    document.querySelectorAll('.ak-input').forEach((el) => el.addEventListener('input', updateLink));
+    updateLink();
+
+    $('save').onclick = async () => {
+      try {
+        const r = await AuraKit.contact.add(card());
+        if (!r.native) AuraUI.toast(t('Fichier .vcf téléchargé', '.vcf file downloaded'));
+      } catch (e) { AuraUI.toast(e.message); }
+    };
+
+    // Where a touch starts near an edge of the screen.
+    const EDGE = 24;
+    document.addEventListener('touchstart', (e) => {
+      const p = e.touches[0];
+      const w = window.innerWidth, h = window.innerHeight;
+      const side = p.clientY < EDGE ? t('haut', 'top') : p.clientY > h - EDGE ? t('bas', 'bottom')
+        : p.clientX < EDGE ? t('gauche', 'left') : p.clientX > w - EDGE ? t('droite', 'right') : null;
+      if (!side) return;
+      $('edge').textContent = t('Bord ' + side + ' : reçu par la page', side[0].toUpperCase() + side.slice(1) + ' edge: received by the page');
+      AuraKit.haptics.tap('light');
+    }, { passive: true });
+  </script>
+</body>
+</html>

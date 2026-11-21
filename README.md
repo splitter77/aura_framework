@@ -17,6 +17,7 @@ It is one script with no dependencies and no build step. It wraps the native `wi
 | `AuraKit.keyboard` | Native buttons above the keyboard, text formatting bar, input bar glued to the keyboard. |
 | `AuraKit.experimental.glass` | **Experimental.** Native Liquid Glass buttons (iOS 26) over HTML elements: `<button data-aura-glass>`. |
 | `AuraKit.camera` | Camera, torch, JPEG snapshots. |
+| `AuraKit.contact` | Contact card (virtual business card) ready to save: native sheet in Aura, `.vcf` file elsewhere. Links to other apps (`whatsapp://`, `shortcuts://`…) open them with no code. |
 | `AuraKit.device()` | Device identifiers. |
 | iframes | A page inside an iframe gets the same API through its parent page (Aura itself does not answer iframes). |
 

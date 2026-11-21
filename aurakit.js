@@ -13,6 +13,7 @@
  *   AuraKit.keyboard      bar above the keyboard, text formatting, input bar glued to the keyboard
  *   AuraKit.experimental.glass   EXPERIMENTAL native Liquid Glass buttons over HTML elements
  *   AuraKit.camera        camera, torch, snapshots
+ *   AuraKit.contact       contact card (virtual business card), ready to save
  *   AuraKit.device()      device identifiers
  *   AuraKit.quitAppClip() closes the App Clip
  *   iframes               pages inside an iframe get the same API through their parent page
@@ -63,7 +64,7 @@
   // Native functions an iframe may call through its parent page. The peer link goes through AuraKit.link() instead.
   var FRAME_CALLS = ['capabilities', 'deviceInfo', 'haptic', 'prepareHaptics', 'proximity.start', 'proximity.stop',
     'statusBar.set', 'statusBar.get', 'orientation.lock', 'orientation.unlock', 'orientation.get',
-    'volumeButtons.start', 'volumeButtons.stop',
+    'volumeButtons.start', 'volumeButtons.stop', 'contact.add',
     'bluetooth.state', 'bluetooth.requestDevice', 'bluetooth.scan', 'bluetooth.stopScan', 'bluetooth.connect',
     'bluetooth.disconnect', 'bluetooth.read', 'bluetooth.write', 'bluetooth.startNotifications', 'bluetooth.stopNotifications'];
 
@@ -919,6 +920,68 @@
     },
   };
 
+  // ------------------------------------------------------------------ Contact card
+  // In Aura the native contact sheet opens ("Create New Contact" / "Add to Existing Contact"; Quick Look in the
+  // App Clip, where Apple does not allow the Contacts framework). Elsewhere the card is handed over as a .vcf
+  // file: Safari on iPhone shows the same card, a computer downloads it.
+  var vcardEscape = function (v) { return String(v).replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1'); };
+  var vcardList = function (v) { return Array.isArray(v) ? v.filter(function (x) { return x != null && x !== ''; }) : v == null || v === '' ? [] : [v]; };
+  var contact = {
+    /** vCard 3.0 text of a card: { firstName, lastName, fullName, org, title, phone, email, url, address, note, photo }.
+     *  phone, email and url may be arrays; photo is a JPEG data URL (or its base64). A vCard string is returned as is. */
+    vcard: function (card) {
+      if (typeof card === 'string') {
+        if (!/^\s*BEGIN:VCARD/i.test(card)) throw new Error('AuraKit.contact: this string is not a vCard (it must start with BEGIN:VCARD).');
+        return card.trim();
+      }
+      var c = card || {};
+      var first = c.firstName || '', last = c.lastName || '';
+      var full = c.fullName || [first, last].filter(Boolean).join(' ') || c.org || '';
+      if (!full) throw new Error('AuraKit.contact: the card needs a name (firstName, lastName, fullName or org).');
+      var lines = ['BEGIN:VCARD', 'VERSION:3.0', 'N:' + vcardEscape(last) + ';' + vcardEscape(first) + ';;;', 'FN:' + vcardEscape(full)];
+      if (c.org) lines.push('ORG:' + vcardEscape(c.org));
+      if (c.title) lines.push('TITLE:' + vcardEscape(c.title));
+      vcardList(c.phone).forEach(function (p) { lines.push('TEL;TYPE=CELL:' + vcardEscape(p)); });
+      vcardList(c.email).forEach(function (m) { lines.push('EMAIL;TYPE=INTERNET:' + vcardEscape(m)); });
+      vcardList(c.url).forEach(function (u) { lines.push('URL:' + vcardEscape(u)); });
+      if (c.address) lines.push('ADR;TYPE=WORK:;;' + vcardEscape(c.address) + ';;;;');
+      if (c.note) lines.push('NOTE:' + vcardEscape(c.note));
+      if (c.photo) lines.push('PHOTO;ENCODING=b;TYPE=JPEG:' + String(c.photo).replace(/^data:[^,]*,/, ''));
+      lines.push('END:VCARD');
+      return lines.join('\r\n');
+    },
+    /** data:text/vcard link for <a href>: Aura opens the contact card from it on any page, without the bridge. */
+    href: function (card) { return 'data:text/vcard;charset=utf-8,' + encodeURIComponent(contact.vcard(card)); },
+    /** Shows the contact card so the visitor can save it. Resolves to { native: true } in Aura, { native: false }
+     *  when the card was handed over as a .vcf file instead. Call it from a tap. */
+    add: async function (card) {
+      var text = contact.vcard(card);
+      var e = await ready();
+      if (e.available) {
+        await requireCap('contacts', 'AuraKit.contact');
+        await call('contact.add', text);
+        return { native: true };
+      }
+      contact.download(text);
+      return { native: false };
+    },
+    /** Downloads the card as a .vcf file (name taken from the card unless given). */
+    download: function (card, fileName) {
+      var text = contact.vcard(card);
+      if (!fileName) {
+        var fn = /^FN:(.*)$/im.exec(text);
+        fileName = ((fn && fn[1].replace(/\\(.)/g, '$1')) || 'contact').replace(/[\\/:*?"<>|\s]+/g, ' ').trim() + '.vcf';
+      }
+      var url = URL.createObjectURL(new Blob([text + '\r\n'], { type: 'text/vcard' }));
+      var a = document.createElement('a');
+      a.href = url; a.download = fileName; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+    },
+    /** True when Aura can show the native contact card (after AuraKit.ready()). */
+    get supported() { return !!(env && env.available && env.caps && env.caps.contacts); },
+  };
+
   // ------------------------------------------------------------------ Bluetooth LE
   // '0000180d-0000-1000-8000-00805f9b34fb', '180d' and '180D' all become '180D'.
   function shortUUID(u) {
@@ -1479,6 +1542,7 @@
     /** Features that may change or not work everywhere yet. */
     experimental: { glass: glass },
     camera: camera,
+    contact: contact,
     ble: ble,
     link: link,
     /** App Clip only: closes the App Clip. Never resolves when it works; rejects otherwise. */

@@ -7,6 +7,7 @@
  * so the iPhone-to-iPhone link, messages, shared state and rooms work between the tabs.
  * Haptics are logged to the console. Press P to toggle the proximity sensor while it is watched.
  * Volume buttons: press + (or =) and - while they are watched. Status bar and rotation lock are logged.
+ * Contact card: Aura.contact.add() shows a simple card (name, company, phone, e-mail) with a button to download the .vcf.
  * Glass buttons (experimental): drawn as CSS glass, outlined in pink, where Aura would put the native ones.
  * Bluetooth LE: "Mock Sensor", with a counter notifying every second (service FFE0, characteristic FFE1),
  * "60BP-MOCK", a Nova pen that writes a random number on a new sheet every few seconds (devices/aura-nova.js),
@@ -268,12 +269,55 @@
     return new Promise(function () {});
   };
 
+  // Aura.contact : une fiche simple à la place de la fiche native, avec le .vcf à télécharger.
+  var showContact = function (text) {
+    var unfolded = text.replace(/\r?\n[ \t]/g, '');
+    var field = function (name) {
+      return unfolded.split(/\r?\n/).filter(function (l) { return l.toUpperCase().indexOf(name + ':') === 0 || l.toUpperCase().indexOf(name + ';') === 0; })
+        .map(function (l) { return l.slice(l.indexOf(':') + 1).replace(/\\n/gi, '\n').replace(/\\(.)/g, '$1'); });
+    };
+    var old = document.getElementById('aura-mock-contact');
+    if (old) old.remove();
+    var box = document.createElement('div');
+    box.id = 'aura-mock-contact';
+    box.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.45);font:15px -apple-system,system-ui,sans-serif';
+    var sheet = document.createElement('div');
+    sheet.style.cssText = 'width:min(420px,100%);background:#1c1c1e;color:#fff;border-radius:14px 14px 0 0;padding:18px 18px 24px;box-sizing:border-box;text-align:center';
+    var photo = field('PHOTO')[0];
+    var add = function (tag, txt, css) { var el = document.createElement(tag); el.textContent = txt; el.style.cssText = css || ''; sheet.appendChild(el); return el; };
+    add('div', '[Aura mock] contact card', 'color:#8e8e93;font-size:12px;margin-bottom:10px');
+    if (photo) { var img = document.createElement('img'); img.src = 'data:image/jpeg;base64,' + photo; img.style.cssText = 'width:72px;height:72px;border-radius:50%;object-fit:cover'; sheet.appendChild(img); }
+    add('div', field('FN')[0] || '', 'font-size:22px;font-weight:600;margin:6px 0 2px');
+    var org = [field('TITLE')[0], field('ORG')[0]].filter(Boolean).join(' · ');
+    if (org) add('div', org, 'color:#8e8e93');
+    field('TEL').concat(field('EMAIL'), field('URL')).forEach(function (v) { add('div', v, 'color:#0a84ff;margin-top:6px'); });
+    var buttons = document.createElement('div');
+    buttons.style.cssText = 'display:flex;gap:10px;margin-top:16px';
+    var btn = function (label, fn) {
+      var b = document.createElement('button');
+      b.textContent = label; b.onclick = fn;
+      b.style.cssText = 'flex:1;border:0;border-radius:10px;padding:12px;font:inherit;font-weight:600;background:#2c2c2e;color:#0a84ff;cursor:pointer';
+      buttons.appendChild(b);
+    };
+    btn('Download .vcf', function () {
+      var a = document.createElement('a');
+      a.href = 'data:text/vcard;charset=utf-8,' + encodeURIComponent(text);
+      a.download = ((field('FN')[0] || 'contact').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'contact') + '.vcf';
+      document.body.appendChild(a); a.click(); a.remove();
+    });
+    btn('Close', function () { box.remove(); });
+    sheet.appendChild(buttons);
+    box.appendChild(sheet);
+    box.addEventListener('click', function (e) { if (e.target === box) box.remove(); });
+    document.body.appendChild(box);
+  };
+
   var Aura = {
     __mock: true,
     version: 1,
     capabilities: function () {
       return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true,
-        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, keyboard: true });
+        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, contacts: true, keyboard: true });
     },
     deviceInfo: function () {
       return ok({ userId: appClip ? 'MOCK-TAG-ID' : 'MOCK-USER-ID', vendorId: 'MOCK-' + me, model: 'Simulator', systemName: 'Web', systemVersion: '1', appClip: appClip });
@@ -369,6 +413,15 @@
       frames: function (items) { (items || []).forEach(function (f) { if (glassEls[f.id]) glassPlace(glassEls[f.id], f); }); return ok(); },
       remove: function (id) { var b = glassEls[id]; if (b) { b.remove(); delete glassEls[id]; } return ok(); },
       clear: function () { Object.keys(glassEls).forEach(function (id) { glassEls[id].remove(); delete glassEls[id]; }); return ok(); },
+    },
+    contact: {
+      add: function (card) {
+        var text = typeof card === 'string' ? card : (window.AuraKit ? window.AuraKit.contact.vcard(card) : '');
+        if (!/^\s*BEGIN:VCARD/i.test(text)) return fail('Aura: contact.add needs a vCard string.');
+        log('contact card\n' + text);
+        showContact(text);
+        return ok();
+      },
     },
     volumeButtons: {
       start: function (o) {
