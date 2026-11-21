@@ -10,16 +10,17 @@
 8. [Screen and buttons: `statusBar`, `orientation`, `volumeButtons`](#8-screen-and-buttons-statusbar-orientation-volumebuttons) — with [swipes from the screen edges](#swipes-from-the-screen-edges) and the experimental [Liquid Glass buttons](#liquid-glass-buttons-experimental-aurakitexperimentalglass)
 9. [Keyboard: `AuraKit.keyboard`](#9-keyboard-aurakitkeyboard)
 10. [Camera and torch: `AuraKit.camera`](#10-camera-and-torch-aurakitcamera)
-11. [Contact cards and links to other apps: `AuraKit.contact`](#11-contact-cards-and-links-to-other-apps-aurakitcontact)
-12. [Device info: `AuraKit.device()`](#12-device-info-aurakitdevice)
-13. [Events and raw calls](#13-events-and-raw-calls)
-14. [iframes](#14-iframes)
-15. [UI helpers: `aurakit-ui.js`](#15-ui-helpers-aurakit-uijs)
-16. [Translations: `aurakit-i18n.js`](#16-translations-aurakit-i18njs)
-17. [Simulator: `aurakit-mock.js`](#17-simulator-aurakit-mockjs)
-18. [Device drivers: `devices/`](#18-device-drivers-devices)
-19. [Wire format](#19-wire-format)
-20. [The native `window.Aura` bridge](#20-the-native-windowaura-bridge)
+11. [Flic buttons: `AuraKit.flic`](#11-flic-buttons-aurakitflic)
+12. [Contact cards and links to other apps: `AuraKit.contact`](#12-contact-cards-and-links-to-other-apps-aurakitcontact)
+13. [Device info: `AuraKit.device()`](#13-device-info-aurakitdevice)
+14. [Events and raw calls](#14-events-and-raw-calls)
+15. [iframes](#15-iframes)
+16. [UI helpers: `aurakit-ui.js`](#16-ui-helpers-aurakit-uijs)
+17. [Translations: `aurakit-i18n.js`](#17-translations-aurakit-i18njs)
+18. [Simulator: `aurakit-mock.js`](#18-simulator-aurakit-mockjs)
+19. [Device drivers: `devices/`](#19-device-drivers-devices)
+20. [Wire format](#20-wire-format)
+21. [The native `window.Aura` bridge](#21-the-native-windowaura-bridge)
 
 ---
 
@@ -51,7 +52,7 @@ Resolves once (later calls return the same promise) to:
 | `browser` | `true` in Aura Browser. |
 | `caps` | `Aura.capabilities()`: `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass, keyboard }`, or `null` (`statusBar` to `liquidGlass` are missing before Aura 1.9, `keyboard` in older versions; `liquidGlass` is `true` on iOS 26 or later). |
 | `frame` | `true` when the page is inside an iframe. |
-| `proxied` | `true` when an iframe uses Aura through its parent page (see [iframes](#14-iframes)). |
+| `proxied` | `true` when an iframe uses Aura through its parent page (see [iframes](#15-iframes)). |
 | `mock` | `true` with the desktop simulator. |
 | `reason` | Why native features are not available (not in Aura, domain not in bookmarks, not HTTPS…). |
 | `version` | AuraKit version. |
@@ -437,7 +438,75 @@ AuraKit.camera.close();
 
 These use the standard web APIs; Aura adds the iOS permissions they need. Microphone and location work with the standard APIs too (`getUserMedia({ audio: true })`, `navigator.geolocation`).
 
-## 11. Contact cards and links to other apps: `AuraKit.contact`
+## 11. Flic buttons: `AuraKit.flic`
+
+Flic 2 buttons in Aura Browser and in the App Clip, through the official Flic library built into the app. The page chooses the mode, the gestures and what each button does.
+
+```js
+await AuraKit.ready();
+if (AuraKit.flic.supported) {
+  const flic = await AuraKit.flic.use({
+    mode: 'gestures',                         // single, double, hold — or 'immediate' (down only)
+    actions: {
+      single: () => nextStep(),
+      double: () => undo(),
+      hold:   () => reveal(),
+    },
+    buttons: { 'Red': { single: () => start() } },  // per button (name or id), checked first
+    haptic: true,                             // short haptic when a press triggers something
+    pair: true,                               // pair a button first if none is paired yet
+  });
+  // flic.disarm() while an animation runs, flic.arm() afterwards, flic.stop() to let go
+}
+```
+
+Without JavaScript, put `data-flic` on any clickable element: it is clicked on that gesture while `use()` is active.
+
+```html
+<button data-flic="single">Next</button>
+<button data-flic="double" data-flic-button="Red">Back</button>   <!-- only the button named Red -->
+```
+
+### `use(options)`
+
+| Option | Meaning |
+| --- | --- |
+| `mode` | `'gestures'` (default): `single`, `double`, `hold`, with the short wait needed to tell a single from a double. `'immediate'`: one `down` event as soon as the button is pressed, nothing else. |
+| `actions` | `{ single, double, hold, down }`: functions called with the event. |
+| `buttons` | `{ 'name or id': { single, double, hold, down } }`. Checked before `actions`; when it handles the gesture, `actions` is skipped. |
+| `only` | Name or id (or a list): presses from other buttons are ignored. |
+| `elements` | `false` to ignore `data-flic` elements (default `true`). Hidden and disabled elements are skipped. |
+| `haptic` | `true` (selection) or a preset name: played when a press triggers an action or an element. |
+| `pair` | `true`: if no button is paired yet, start pairing first (`pairTimeout`, default 60 s). |
+| `armed` | `false` to set everything up without receiving presses yet. |
+
+`use()` resolves to `{ state, arm(), disarm(), stop() }`. Calling it again replaces the configuration.
+
+### Other functions
+
+| Function | Meaning |
+| --- | --- |
+| `supported` | `true` when this Aura version has Flic support (after `AuraKit.ready()`). |
+| `start()` | Starts Flic (iOS asks for Bluetooth the first time) and waits until the paired buttons are restored. Resolves to the state. |
+| `pair({ timeout })` | Ask the user to hold the Flic button for 7 seconds near the phone. Resolves to the new button `{ id, name, … }`; rejects on error or timeout. |
+| `cancelPairing()` | Stops pairing. |
+| `arm(true \| false)` / `disarm()` | Reception on or off. Off by default, and switched off again on every new page. |
+| `mode('gestures' \| 'immediate')` | Changes the mode. |
+| `buttons` | Paired buttons: `[{ id, name, ready, state, batteryVoltage }]`. |
+| `connect(id)`, `disconnect(id)`, `forget(id)` | Connection control; `forget` unpairs the button. |
+| `state` | `{ started, restored, bluetooth, scanning, scanStatus, armed, mode, lastError, buttons }`. |
+| `refresh()` | Reads the state again. |
+| `on(name, fn)` / `off(name, fn)` | `press`, `single`, `double`, `hold`, `down`, `state`. `fn(event)` with `{ id, gesture, button: { id, name, number }, timestamp }`. Returns `off()`. |
+
+Safety built in:
+
+- Nothing is received until the page arms reception; a new page load disarms it.
+- Presses queued while a button was out of range are never delivered, and a press older than 1.5 s is dropped.
+- `gestures` and `immediate` are exclusive, so one press never triggers two actions. Do not route the same action from `on('press')` and from `single`.
+- Pairings are kept by the app (Aura Browser and the App Clip each keep their own). In the App Clip, iOS may delete them when it removes the App Clip's data.
+- The phone must stay awake with the page on screen: a page in the background does not run.
+
+## 12. Contact cards and links to other apps: `AuraKit.contact`
 
 Shows the iOS contact card so the visitor can save it to their iPhone: a virtual business card.
 
@@ -478,7 +547,7 @@ saveButton.onclick = () => AuraKit.contact.add({
 
 In Aura, a link whose scheme is not a web one (`http`, `https`, `data`, `blob`, `about`, `javascript`) opens the app that handles it, with no code: `tel:`, `sms:`, `mailto:`, `facetime:`, `maps:`, `whatsapp://send?text=…`, `shortcuts://run-shortcut?name=…`, and any app's own scheme. If no app handles the scheme, nothing happens. Use plain links, or `location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(name)` from a tap. Universal links (`https://wa.me/…`) also work and fall back to the web page when the app is not installed.
 
-## 12. Device info: `AuraKit.device()`
+## 13. Device info: `AuraKit.device()`
 
 ```js
 const info = await AuraKit.device();   // null outside Aura
@@ -518,7 +587,7 @@ const info = await AuraKit.device();   // null outside Aura
 
 The result is not cached: call `device()` again to get the current theme, orientation or text size. Older Aura versions return only the first six fields.
 
-## 13. Events and raw calls
+## 14. Events and raw calls
 
 ```js
 const off = AuraKit.on('bluetooth.state', ({ state }) => console.log(state));
@@ -527,13 +596,13 @@ const state = await AuraKit.call('bluetooth.state');
 
 | Function | Meaning |
 | --- | --- |
-| `AuraKit.on(name, fn)` / `AuraKit.off(name, fn)` | Native events: `peer.connected`, `peer.message`, `peer.disconnected`, `bluetooth.discovered`, `bluetooth.notification`, `bluetooth.state`, `bluetooth.disconnected`, `proximity`, `volumeButton`, `glass.tap`, `keyboard.show`, `keyboard.hide`, `keyboard.change`, `keyboard.toolbar.tap`. They also work in iframes (except `peer.*`, which go through the link). |
+| `AuraKit.on(name, fn)` / `AuraKit.off(name, fn)` | Native events: `peer.connected`, `peer.message`, `peer.disconnected`, `bluetooth.discovered`, `bluetooth.notification`, `bluetooth.state`, `bluetooth.disconnected`, `proximity`, `volumeButton`, `glass.tap`, `keyboard.show`, `keyboard.hide`, `keyboard.change`, `keyboard.toolbar.tap`, `flic.press`, `flic.state`. They also work in iframes (except `peer.*`, which go through the link). |
 | `AuraKit.call(path, ...args)` | Any native function by its path, e.g. `AuraKit.call('haptic', 'impact', { style: 'rigid' })`. |
 | `AuraKit.Emitter` | The small event class used everywhere (`on`, `once`, `off`, `emit`), for your own objects. |
 | `AuraKit.params` | `URLSearchParams` of the page. |
 | `AuraKit.sleep(ms)` | Promise that resolves after `ms`. |
 
-## 14. iframes
+## 15. iframes
 
 Aura does not answer pages inside an iframe. AuraKit fixes that: **load `aurakit.js` on both the parent page and the iframe page**, and the iframe gets the same API through its parent, with no extra code.
 
@@ -556,7 +625,7 @@ AuraKit.frames.parentOrigin('https://parent.example');
 
 `env(safe-area-inset-*)` is 0 inside an iframe; pass the values from the parent if you need them.
 
-## 15. UI helpers: `aurakit-ui.js`
+## 16. UI helpers: `aurakit-ui.js`
 
 Load `aurakit-ui.css` and `aurakit-ui.js` (after `aurakit.js`), and put `class="ak"` on `<body>` for the base theme.
 
@@ -591,7 +660,7 @@ Classes on `<html>`: `ak-in-aura`, `ak-app-clip`, `ak-connected`. CSS helpers: `
 
 Labels follow `aurakit-i18n.js` when it is loaded (French or English), otherwise the page's `lang`.
 
-## 16. Translations: `aurakit-i18n.js`
+## 17. Translations: `aurakit-i18n.js`
 
 ```html
 <script src="aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
@@ -620,7 +689,7 @@ Language: `?lang=xx`, else the saved choice, else the phone language, else the d
 | `AuraI18n.set('en')` | Saves the choice and reloads (the link reconnects by itself). `[data-set-lang]` buttons call it. |
 | `AuraI18n.apply(root)` | Translates elements added later. |
 
-## 17. Simulator: `aurakit-mock.js`
+## 18. Simulator: `aurakit-mock.js`
 
 A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It does nothing unless the URL has `?mock=`, and never runs inside Aura.
 
@@ -640,11 +709,12 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
 - Bluetooth: a PLB, **MA_Pouce_M0CK01** (`id` `MOCK-PLB-0001`), that answers the PLB text commands: hold **B** to press its button (held one second: long press).
 - `deviceInfo()` returns fake identifiers; screen, appearance and locale come from the desktop browser.
+- Flic: `pair()` adds a fake button after 1.5 s. Once reception is armed, keys **1**, **2**, **3** send `single`, `double`, `hold` (any of them sends `down` in `immediate` mode).
 - `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
 
 The tabs share `localStorage`: a room code saved in one tab is used by the other one after a reload.
 
-## 18. Device drivers: `devices/`
+## 19. Device drivers: `devices/`
 
 `devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) `devices/aura-nova.js` (**Nova Pen**, below) and `devices/aura-plb.js` (**PLB**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
 
@@ -723,7 +793,7 @@ The PLB is named `MA_Pouce_XXXXXX` and speaks text over the Nordic UART Service 
 
 Events: `push`, `release` (`{ duration, long }`), `longpress` (`{ duration }`), `click` (release of a press that was not long), `button` (all, with `{ event }`), `message` (`{ text }`, every answer), `data` (raw text), `discovered`, `status` (`permission`, `scanning`, `connecting`, `connected`, `reconnecting`, `disconnected`), `connect`, `disconnect`. The parser is exposed for tests: `AuraPLB.StreamParser`, `AuraPLB.parseConfig`.
 
-## 19. Wire format
+## 20. Wire format
 
 Each `link.send(type, data)` is one `Aura.peer.send()` of the JSON object `{ t: type, d: data }`. Types starting with `~` are used by AuraKit:
 
@@ -735,14 +805,14 @@ Each `link.send(type, data)` is one `Aura.peer.send()` of the JSON object `{ t: 
 | `~state` | `{ name, value, ts, by, full }` | Shared state change; `full: true` when the host sends its states on sync. Newer `ts` wins (ties: higher `by`). |
 | `~chunk` | `{ id, i, n, s }` | Piece `i` of `n` of a JSON envelope longer than 60 KB, `s` being up to 16 000 characters. |
 
-## 20. The native `window.Aura` bridge
+## 21. The native `window.Aura` bridge
 
 AuraKit is built on the bridge that Aura Browser and the App Clip inject into trusted pages (HTTPS, main frame, bookmarked domain or the App Clip's domain). You can mix both: everything below stays available as `window.Aura`.
 
 | Function | Returns |
 | --- | --- |
-| `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass, contacts, keyboard }` |
-| `Aura.deviceInfo()` | `{ userId, vendorId, model, systemName, systemVersion, appClip, modelIdentifier, modelName, idiom, screen, appearance, locale }` (see [section 12](#12-device-info-aurakitdevice); older Aura versions return only the first six) |
+| `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass, contacts, keyboard, flic }` (a key is missing on older Aura versions) |
+| `Aura.deviceInfo()` | `{ userId, vendorId, model, systemName, systemVersion, appClip, modelIdentifier, modelName, idiom, screen, appearance, locale }` (see [section 13](#13-device-info-aurakitdevice); older Aura versions return only the first six) |
 | `Aura.haptic(type, options)` / `Aura.haptic({ type: 'pattern', events })` | `impact` (`style`, `intensity`), `notification` (`style`), `selection`, or a pattern. |
 | `Aura.prepareHaptics()` | — |
 | `Aura.bluetooth.state()`, `requestDevice(o)`, `scan(o)`, `stopScan()`, `connect(id, o)`, `disconnect(id)`, `read(id, s, c)`, `write(id, s, c, data, o)`, `startNotifications(id, s, c)`, `stopNotifications(id, s, c)` | See [section 6](#6-bluetooth-le-aurakitble). |
@@ -755,10 +825,11 @@ AuraKit is built on the bridge that Aura Browser and the App Clip inject into tr
 | `Aura.orientation.lock(name)` / `unlock()` / `get()` | `{ orientation, locked }` |
 | `Aura.volumeButtons.start({ keepVolume })` / `stop()` | `{ volume, keepVolume }` / —; event `volumeButton` `{ button, volume }` |
 | `Aura.glass.set({ id, x, y, width, height, fixed, hidden, title, symbol, style, tint, color, fontSize, cornerRadius })` / `frames([{ id, x, y, width, height, fixed, hidden }])` / `remove(id)` / `clear()` | Experimental. Frames in CSS px (document coordinates, or viewport when `fixed`); event `glass.tap` `{ id }` |
+| `Aura.flic.start()`, `state()`, `pair()`, `cancelPairing()`, `arm(value)`, `mode(value)`, `connect(id)`, `disconnect(id)`, `forget(id)` | The state `{ started, restored, bluetooth, scanning, scanStatus, armed, mode, lastError, buttons }`. Events `flic.press` `{ id, buttonID, buttonNumber, gesture, timestamp }` (only while armed) and `flic.state`. See [section 11](#11-flic-buttons-aurakitflic). |
 | `Aura.keyboard.watch()` / `unwatch()` / `state()` / `hide()` | `{ visible, height, accessoryHeight, duration }`; events `keyboard.show`, `keyboard.hide`, `keyboard.change` with the same object. Main frame only. |
 | `Aura.keyboard.set({ accessory, dismissMode })` | `accessory`: `'default'` (WebKit's ⌃ ⌄ Done bar), `'none'`, `'toolbar'`; `dismissMode`: `'none'`, `'onDrag'`, `'interactive'`. |
 | `Aura.keyboard.toolbar({ items, style, tint })` / `update(id, changes)` / `reset()` | Native buttons above the keyboard (see [section 9](#9-keyboard-aurakitkeyboard)); event `keyboard.toolbar.tap` `{ id }`. `reset()` puts back WebKit's bar. |
-| `Aura.contact.add(card)` | Shows the contact card (see [section 11](#11-contact-cards-and-links-to-other-apps-aurakitcontact)); `card` is a vCard string or the same object as `AuraKit.contact.add()`. |
+| `Aura.contact.add(card)` | Shows the contact card (see [section 12](#12-contact-cards-and-links-to-other-apps-aurakitcontact)); `card` is a vCard string or the same object as `AuraKit.contact.add()`. |
 | `Aura.on(name, fn)` / `Aura.off(name, fn)` | Events; each one is also dispatched on `window` as `aura:<name>`. |
 
 Limits: no motion sensors (Apple blocks Core Motion in App Clips); every new page load closes the link, disconnects Bluetooth devices, stops the proximity sensor and the volume buttons, unlocks the rotation and gives the status bar back to the bookmark's setting, which is why a multi-screen experience should stay on one page (use `#hash` navigation or show/hide sections).

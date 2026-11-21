@@ -7,6 +7,7 @@
  *                         request/answer, state sync, shared state, messages larger than 64 KB
  *   AuraKit.ble           Bluetooth LE devices with notifications and automatic reconnection
  *   AuraKit.proximity     proximity sensor
+ *   AuraKit.flic          Flic 2 buttons: pairing, gestures, per-button actions, data-flic elements
  *   AuraKit.statusBar     show or hide the iOS status bar at any time
  *   AuraKit.orientation   lock the screen rotation
  *   AuraKit.volumeButtons the volume buttons as triggers
@@ -51,7 +52,7 @@
   // Every native event, re-emitted here (works the same in iframes).
   var EVENTS = ['peer.connected', 'peer.message', 'peer.disconnected', 'bluetooth.discovered',
     'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity', 'volumeButton', 'glass.tap',
-    'keyboard.show', 'keyboard.hide', 'keyboard.change', 'keyboard.toolbar.tap'];
+    'keyboard.show', 'keyboard.hide', 'keyboard.change', 'keyboard.toolbar.tap', 'flic.press', 'flic.state'];
   var bus = new Emitter();
   var native = function () { return window.Aura || null; };
   (function subscribeNative() {
@@ -66,7 +67,8 @@
     'statusBar.set', 'statusBar.get', 'orientation.lock', 'orientation.unlock', 'orientation.get',
     'volumeButtons.start', 'volumeButtons.stop', 'contact.add',
     'bluetooth.state', 'bluetooth.requestDevice', 'bluetooth.scan', 'bluetooth.stopScan', 'bluetooth.connect',
-    'bluetooth.disconnect', 'bluetooth.read', 'bluetooth.write', 'bluetooth.startNotifications', 'bluetooth.stopNotifications'];
+    'bluetooth.disconnect', 'bluetooth.read', 'bluetooth.write', 'bluetooth.startNotifications', 'bluetooth.stopNotifications',
+    'flic.start', 'flic.state', 'flic.pair', 'flic.cancelPairing', 'flic.arm', 'flic.mode', 'flic.connect', 'flic.disconnect', 'flic.forget'];
 
   function callNative(path, args) {
     var A = native();
@@ -1517,6 +1519,163 @@
     throw new Error('The App Clip did not quit (check that Bluetooth is on and allowed).');
   }
 
+  // ------------------------------------------------------------------ Flic buttons
+  // Flic 2 buttons through the official library built into Aura and the App Clip.
+  // Presses only arrive once reception is armed; Aura disarms it on every new page.
+  var FLIC_GESTURES = ['single', 'double', 'hold', 'down'];
+  var flicEvents = new Emitter();
+  var flicSeen = [];
+  var flicConfig = null;               // options of flic.use(), null when not in use
+  var flicState = { supported: false, started: false, restored: false, bluetooth: 'unknown', scanning: false,
+    scanStatus: 'idle', armed: false, mode: 'gestures', lastError: null, buttons: [] };
+
+  function flicApply(s) {
+    if (!s) return flicState;
+    Object.keys(s).forEach(function (k) { if (k in flicState) flicState[k] = s[k]; });
+    flicState.supported = true;
+    flicEvents.emit('state', flic.state);
+    return flic.state;
+  }
+  function flicButtonFor(id) {
+    for (var i = 0; i < flicState.buttons.length; i++) if (flicState.buttons[i].id === id) return flicState.buttons[i];
+    return { id: id, name: 'Flic' };
+  }
+  // A button selector (in options.only / options.buttons) matches its id or its name, case-insensitive.
+  function flicMatches(selector, button) {
+    var s = String(selector).toLowerCase();
+    return s === String(button.id).toLowerCase() || s === String(button.name || '').toLowerCase();
+  }
+  function flicRun(fn, event) {
+    if (typeof fn !== 'function') return false;
+    try { fn(event); } catch (err) { console.error('[AuraKit]', err); }
+    return true;
+  }
+  // <button data-flic="single">: clicked on that gesture. data-flic-button="Red" limits it to one button.
+  function flicClickTargets(event) {
+    var nodes = document.querySelectorAll('[data-flic]');
+    var done = false;
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if ((el.getAttribute('data-flic') || '').split(/\s+/).indexOf(event.gesture) < 0) continue;
+      var only = el.getAttribute('data-flic-button');
+      if (only && !flicMatches(only, event.button)) continue;
+      if (el.disabled || el.closest('[hidden], [inert]') || !el.getClientRects().length) continue;
+      el.click();
+      done = true;
+    }
+    return done;
+  }
+  function flicAccept(raw) {
+    if (!raw || typeof raw.id !== 'string' || typeof raw.buttonID !== 'string' || FLIC_GESTURES.indexOf(raw.gesture) < 0) return;
+    // Never act on a stale press (Bluetooth hiccup, page busy): 1.5 s at most.
+    if (!isFinite(raw.timestamp) || Math.abs(Date.now() - raw.timestamp) > 1500) return;
+    if (flicSeen.indexOf(raw.id) >= 0) return;
+    flicSeen.push(raw.id);
+    if (flicSeen.length > 64) flicSeen.shift();
+    var button = flicButtonFor(raw.buttonID);
+    var event = { id: raw.id, gesture: raw.gesture, button: { id: button.id, name: button.name, number: raw.buttonNumber || 0 }, timestamp: raw.timestamp };
+    var cfg = flicConfig;
+    if (cfg && cfg.only && ![].concat(cfg.only).some(function (s) { return flicMatches(s, event.button); })) return;
+    flicEvents.emit('press', event);
+    flicEvents.emit(event.gesture, event);
+    if (!cfg) return;
+    var handled = false;
+    if (cfg.buttons) {
+      Object.keys(cfg.buttons).forEach(function (sel) {
+        if (!handled && flicMatches(sel, event.button)) handled = flicRun((cfg.buttons[sel] || {})[event.gesture], event);
+      });
+    }
+    if (!handled) handled = flicRun((cfg.actions || {})[event.gesture], event);
+    if (cfg.elements !== false && flicClickTargets(event)) handled = true;
+    if (handled && cfg.haptic) haptics.play(cfg.haptic === true ? 'selection' : cfg.haptic);
+  }
+  bus.on('flic.state', flicApply);
+  bus.on('flic.press', flicAccept);
+
+  async function flicCall(path, arg) {
+    var e = await ready();
+    if (!e.available || !e.caps || !e.caps.flic) throw new Error('Flic buttons need a recent version of Aura or the App Clip.');
+    return flicApply(await call('flic.' + path, arg));
+  }
+  function flicWait(test, timeout) {
+    return new Promise(function (resolve, reject) {
+      if (test(flicState)) { resolve(flic.state); return; }
+      var timer = setTimeout(function () { off(); reject(new Error('Flic: timeout.')); }, timeout);
+      var off = flicEvents.on('state', function (s) { if (test(flicState)) { clearTimeout(timer); off(); resolve(s); } });
+    });
+  }
+
+  var flic = {
+    /** true when Aura can drive Flic buttons (known after AuraKit.ready()). */
+    get supported() { return !!(env && env.available && env.caps && env.caps.flic); },
+    /** Copy of the last known state: { started, restored, bluetooth, scanning, armed, mode, lastError, buttons: [{ id, name, ready, state, batteryVoltage }] }. */
+    get state() { return JSON.parse(JSON.stringify(flicState)); },
+    get buttons() { return flicState.buttons.slice(); },
+    /** Starts Flic (asks for Bluetooth the first time) and waits until the paired buttons are restored. */
+    start: async function (options) {
+      var o = options || {};
+      var s = await flicCall('start');
+      if (!flicState.restored) s = await flicWait(function (st) { return st.restored; }, o.timeout || 10000).catch(function () { return flic.state; });
+      return s;
+    },
+    /** Pairing: hold the Flic button 7 s near the phone. Resolves to the new button, rejects on error or timeout. */
+    pair: async function (options) {
+      var o = options || {};
+      await flic.start();
+      var before = flicState.buttons.map(function (b) { return b.id; });
+      await flicCall('pair');
+      if (!flicState.scanning && flicState.lastError) throw new Error(flicState.lastError);
+      await flicWait(function (st) { return !st.scanning; }, o.timeout || 60000).catch(function (err) { quiet(call('flic.cancelPairing')); throw err; });
+      var added = flicState.buttons.filter(function (b) { return before.indexOf(b.id) < 0; })[0];
+      if (!added) throw new Error(flicState.lastError || 'No Flic button was paired.');
+      return added;
+    },
+    cancelPairing: function () { return flicCall('cancelPairing'); },
+    /** Reception on (true) or off (false). Off by default: arm when the page is ready to react. */
+    arm: function (value) { return flicCall('arm', value !== false); },
+    disarm: function () { return flicCall('arm', false); },
+    /** 'gestures' (single, double, hold) or 'immediate' (down only, no delay). */
+    mode: function (value) {
+      if (value !== 'gestures' && value !== 'immediate') return Promise.reject(new Error("Flic mode must be 'gestures' or 'immediate'."));
+      return flicCall('mode', value);
+    },
+    connect: function (id) { return flicCall('connect', id); },
+    disconnect: function (id) { return flicCall('disconnect', id); },
+    /** Unpairs a button (it must be paired again to come back). */
+    forget: function (id) { return flicCall('forget', id); },
+    refresh: function () { return flicCall('state'); },
+    /** Events: press, single, double, hold, down, state. fn(event) with { id, gesture, button: { id, name, number }, timestamp }. Returns off(). */
+    on: function (name, fn) { return flicEvents.on(name, fn); },
+    off: function (name, fn) { flicEvents.off(name, fn); },
+    /**
+     * One-call setup. Starts Flic, sets the mode, arms reception and routes presses:
+     *   AuraKit.flic.use({
+     *     mode: 'gestures',                       // or 'immediate'
+     *     actions: { single: next, double: undo, hold: reveal },
+     *     buttons: { 'Red': { single: start } },  // per button (name or id), checked before actions
+     *     only: ['Red', 'Blue'],                  // ignore other buttons
+     *     elements: true,                         // click [data-flic="single"] elements (default true)
+     *     haptic: true,                           // short haptic when a press triggers something
+     *     pair: true,                             // pair a button first if none is paired
+     *   })
+     * Resolves to { state, arm(), disarm(), stop() }. Calling use() again replaces the configuration.
+     */
+    use: async function (options) {
+      var o = options || {};
+      flicConfig = o;
+      await flic.start();
+      if (o.pair && !flicState.buttons.length) await flic.pair({ timeout: o.pairTimeout });
+      await flic.mode(o.mode || 'gestures');
+      if (o.armed !== false) await flic.arm(true);
+      return {
+        get state() { return flic.state; },
+        arm: function () { return flic.arm(true); },
+        disarm: function () { return flic.arm(false); },
+        stop: function () { if (flicConfig === o) flicConfig = null; return flic.arm(false); },
+      };
+    },
+  };
+
   // ------------------------------------------------------------------ Public API
   var AuraKit = {
     version: VERSION,
@@ -1526,7 +1685,7 @@
     get isAppClip() { return !!(env && env.appClip); },
     get isBrowser() { return !!(env && env.browser); },
     get inFrame() { return inFrame; },
-    /** Native events (bluetooth.*, proximity, volumeButton, keyboard.*, peer.*). Returns off(). */
+    /** Native events (bluetooth.*, proximity, volumeButton, keyboard.*, peer.*, flic.*). Returns off(). */
     on: function (name, fn) { return bus.on(name, fn); },
     off: function (name, fn) { bus.off(name, fn); },
     /** Raw call: AuraKit.call('bluetooth.state'). */
@@ -1544,6 +1703,7 @@
     camera: camera,
     contact: contact,
     ble: ble,
+    flic: flic,
     link: link,
     /** App Clip only: closes the App Clip. Never resolves when it works; rejects otherwise. */
     quitAppClip: quitAppClip,

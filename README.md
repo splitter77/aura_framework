@@ -11,6 +11,7 @@ It is one script with no dependencies and no build step. It wraps the native `wi
 | `AuraKit.link()` | **Link between two iPhones** over Bluetooth: automatic pairing, automatic reconnection, typed messages, request/answer, sync on connect, **shared state**, and messages **larger than 64 KB**. |
 | `AuraKit.ble` | Bluetooth LE devices: scan, connect, read, write (with chunking), notifications, automatic reconnection. |
 | `AuraKit.proximity` | Proximity sensor. |
+| `AuraKit.flic` | **Flic 2 buttons**: pairing, single / double / hold or instant press, actions per gesture and per button, `data-flic` elements clicked without code. |
 | `AuraKit.statusBar` | Show or hide the iOS status bar at any time (`hide()`, `show()`, `toggle()`). |
 | `AuraKit.orientation` | Lock the screen rotation (`lock('portrait')`, `lock()` = as it is now, `unlock()`). |
 | `AuraKit.volumeButtons` | The volume buttons as triggers, without changing the volume or showing the iOS indicator. |

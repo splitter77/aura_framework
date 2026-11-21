@@ -6,6 +6,8 @@
  * Open two tabs of the same browser (one host, one join): Aura.peer goes through BroadcastChannel,
  * so the iPhone-to-iPhone link, messages, shared state and rooms work between the tabs.
  * Haptics are logged to the console. Press P to toggle the proximity sensor while it is watched.
+ * Flic: Aura.flic.pair() adds a fake button after 1.5 s; once armed, keys 1 / 2 / 3 send single / double / hold
+ * (any of them sends down in 'immediate' mode).
  * Volume buttons: press + (or =) and - while they are watched. Status bar and rotation lock are logged.
  * Contact card: Aura.contact.add() shows a simple card (name, company, phone, e-mail) with a button to download the .vcf.
  * Glass buttons (experimental): drawn as CSS glass, outlined in pink, where Aura would put the native ones.
@@ -117,6 +119,21 @@
     b.style.width = Math.max(f.width || 0, 1) + 'px'; b.style.height = Math.max(f.height || 0, 1) + 'px';
     if (typeof f.hidden === 'boolean') b.style.display = f.hidden ? 'none' : 'flex';
   };
+
+  // ---------------------------------------------------------------- Flic (keys 1 / 2 / 3)
+  var flicState = { started: false, restored: false, bluetooth: 'poweredOn', scanning: false, scanStatus: 'idle',
+    armed: false, mode: 'gestures', lastError: null, buttons: [] };
+  var flicCopy = function () { return JSON.parse(JSON.stringify(flicState)); };
+  var flicChanged = function () { emit('flic.state', flicCopy()); return ok(flicCopy()); };
+  var flicPairTimer = null;
+  window.addEventListener('keydown', function (e) {
+    var gesture = { 1: 'single', 2: 'double', 3: 'hold' }[e.key];
+    if (!gesture || /input|textarea/i.test((e.target && e.target.tagName) || '')) return;
+    if (!flicState.armed || !flicState.buttons.length) { log('flic: pair a button and arm reception first'); return; }
+    if (flicState.mode === 'immediate') gesture = 'down';
+    log('flic', gesture);
+    emit('flic.press', { id: Math.random().toString(36).slice(2), buttonID: flicState.buttons[0].id, buttonNumber: 0, gesture: gesture, timestamp: Date.now() });
+  });
 
   // ---------------------------------------------------------------- fake Bluetooth devices
   var DEV = { id: 'MOCK-BLE-0001', name: 'Mock Sensor', rssi: -52 };
@@ -317,7 +334,7 @@
     version: 1,
     capabilities: function () {
       return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true,
-        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, contacts: true, keyboard: true });
+        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, contacts: true, keyboard: true, flic: true });
     },
     deviceInfo: function () {
       var dark = !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -391,6 +408,45 @@
       };
     })(),
     _mockTap: function (id) { emit('keyboard.toolbar.tap', { id: String(id) }); },
+    flic: {
+      start: function () {
+        if (!flicState.started) {
+          flicState.started = true;
+          setTimeout(function () { flicState.restored = true; flicChanged(); }, 300);
+        }
+        return ok(flicCopy());
+      },
+      state: function () { return ok(flicCopy()); },
+      pair: function () {
+        if (!flicState.restored) { flicState.lastError = 'Wait for the restore and turn Bluetooth on.'; return ok(flicCopy()); }
+        flicState.scanning = true; flicState.scanStatus = 'searching'; flicState.lastError = null;
+        clearTimeout(flicPairTimer);
+        flicPairTimer = setTimeout(function () {
+          var n = flicState.buttons.length + 1;
+          flicState.buttons.push({ id: 'MOCK-FLIC-' + n, name: 'Flic ' + n, ready: true, state: 'connected', batteryVoltage: 3.0 });
+          flicState.scanning = false; flicState.scanStatus = 'completed';
+          log('flic: paired "Flic ' + n + '" — arm reception, then press 1 / 2 / 3');
+          flicChanged();
+        }, 1500);
+        return flicChanged();
+      },
+      cancelPairing: function () {
+        clearTimeout(flicPairTimer);
+        flicState.scanning = false; flicState.scanStatus = 'failed'; flicState.lastError = 'Pairing cancelled.';
+        return flicChanged();
+      },
+      arm: function (value) { flicState.armed = value !== false; return flicChanged(); },
+      mode: function (value) {
+        if (value !== 'gestures' && value !== 'immediate') return fail("Aura: flic.mode must be 'gestures' or 'immediate'.");
+        flicState.mode = value; return flicChanged();
+      },
+      connect: function () { return flicChanged(); },
+      disconnect: function () { return flicChanged(); },
+      forget: function (id) {
+        flicState.buttons = flicState.buttons.filter(function (b) { return b.id !== id; });
+        return flicChanged();
+      },
+    },
     proximity: {
       start: function () { proxOn = true; log('proximity watched — press P to cover / uncover the sensor'); return ok({ supported: true, near: near }); },
       stop: function () { proxOn = false; return ok(); },
