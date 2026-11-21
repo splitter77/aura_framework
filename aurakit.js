@@ -359,12 +359,12 @@
   })();
 
   // ------------------------------------------------------------------ Device
-  var deviceInfoPromise = null;
+  /** Device, screen, appearance and locale info. Not cached: the theme, orientation or text size can change. */
   function device() {
-    return deviceInfoPromise || (deviceInfoPromise = ready().then(function (e) {
+    return ready().then(function (e) {
       if (!e.available || (e.caps && e.caps.deviceInfo === false)) return null;
       return call('deviceInfo').catch(function () { return null; });
-    }));
+    });
   }
 
   // ------------------------------------------------------------------ Proximity

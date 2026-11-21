@@ -11,7 +11,7 @@
 9. [Keyboard: `AuraKit.keyboard`](#9-keyboard-aurakitkeyboard)
 10. [Camera and torch: `AuraKit.camera`](#10-camera-and-torch-aurakitcamera)
 11. [Contact cards and links to other apps: `AuraKit.contact`](#11-contact-cards-and-links-to-other-apps-aurakitcontact)
-12. [Device identifiers: `AuraKit.device()`](#12-device-identifiers-aurakitdevice)
+12. [Device info: `AuraKit.device()`](#12-device-info-aurakitdevice)
 13. [Events and raw calls](#13-events-and-raw-calls)
 14. [iframes](#14-iframes)
 15. [UI helpers: `aurakit-ui.js`](#15-ui-helpers-aurakit-uijs)
@@ -478,14 +478,45 @@ saveButton.onclick = () => AuraKit.contact.add({
 
 In Aura, a link whose scheme is not a web one (`http`, `https`, `data`, `blob`, `about`, `javascript`) opens the app that handles it, with no code: `tel:`, `sms:`, `mailto:`, `facetime:`, `maps:`, `whatsapp://send?text=…`, `shortcuts://run-shortcut?name=…`, and any app's own scheme. If no app handles the scheme, nothing happens. Use plain links, or `location.href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(name)` from a tap. Universal links (`https://wa.me/…`) also work and fall back to the web page when the app is not installed.
 
-## 12. Device identifiers: `AuraKit.device()`
+## 12. Device info: `AuraKit.device()`
 
 ```js
 const info = await AuraKit.device();   // null outside Aura
-// { userId, vendorId, model, systemName, systemVersion, appClip }
+// {
+//   userId, vendorId, model, systemName, systemVersion, appClip,
+//   modelIdentifier: 'iPhone16,2', modelName: 'iPhone 15 Pro Max', idiom: 'phone',
+//   screen: { width, height, nativeWidth, nativeHeight, scale, maxFrameRate,
+//             safeArea: { top, left, bottom, right }, orientation },
+//   appearance: { colorScheme: 'dark', contentSize: 'l', boldText, reduceMotion,
+//                 reduceTransparency, increaseContrast, voiceOver, invertColors },
+//   locale: { languages: ['fr-FR', 'en-FR'], language: 'fr', region: 'FR', currency: 'EUR',
+//             timeZone: 'Europe/Paris', hourCycle: '24h', measurementSystem: 'metric', firstWeekday: 'monday' }
+// }
 ```
 
-`userId` is the Aura identifier: in Aura Browser it follows your iCloud Keychain; in the App Clip it is the identifier of the scanned tag or link. `vendorId` is specific to this device. The result is cached.
+`userId` is the Aura identifier: in Aura Browser it follows your iCloud Keychain; in the App Clip it is the identifier of the scanned tag or link. `vendorId` is specific to this device (empty in the App Clip).
+
+| Field | Meaning |
+| --- | --- |
+| `modelIdentifier` | Hardware identifier (`iPhone16,2`). In the iOS simulator, the simulated model. |
+| `modelName` | Marketing name, or `null` for a model Aura does not know yet (map `modelIdentifier` yourself). |
+| `idiom` | `phone`, `pad`, `mac`, `vision` or `unknown`. |
+| `screen.width` / `height` | Screen size in points, in the current orientation. |
+| `screen.nativeWidth` / `nativeHeight` | Physical pixels, in portrait. |
+| `screen.scale`, `maxFrameRate` | Pixels per point (2 or 3); 60 or 120 (ProMotion). |
+| `screen.safeArea` | Insets in points (notch or Dynamic Island, home indicator). |
+| `screen.orientation` | `portrait`, `portraitUpsideDown`, `landscapeLeft`, `landscapeRight` or `unknown`. |
+| `appearance.colorScheme` | `light` or `dark`: the phone setting, even when Aura draws its status bar in another theme. |
+| `appearance.contentSize` | Text size: `xs`, `s`, `m`, `l` (default), `xl`, `xxl`, `xxxl`, `accessibility-m` … `accessibility-xxxl`. |
+| `appearance.*` (booleans) | Bold text, reduce motion, reduce transparency, increase contrast, VoiceOver running, invert colors. |
+| `locale.languages` | Preferred languages, in order. |
+| `locale.language`, `region`, `currency` | `fr`, `FR`, `EUR` (or `null`). |
+| `locale.timeZone` | IANA name (`Europe/Paris`). |
+| `locale.hourCycle` | `12h` or `24h`. |
+| `locale.measurementSystem` | `metric`, `us` or `uk`. |
+| `locale.firstWeekday` | `monday`, `sunday`… |
+
+The result is not cached: call `device()` again to get the current theme, orientation or text size. Older Aura versions return only the first six fields.
 
 ## 13. Events and raw calls
 
@@ -608,7 +639,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Bluetooth: one device, **Mock Sensor** (`id` `MOCK-BLE-0001`, service `FFE0`, characteristic `FFE1`: read returns the last value written, notifications send a counter every second).
 - Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
 - Bluetooth: a PLB, **MA_Pouce_M0CK01** (`id` `MOCK-PLB-0001`), that answers the PLB text commands: hold **B** to press its button (held one second: long press).
-- `deviceInfo()` returns fake identifiers.
+- `deviceInfo()` returns fake identifiers; screen, appearance and locale come from the desktop browser.
 - `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
 
 The tabs share `localStorage`: a room code saved in one tab is used by the other one after a reload.
@@ -711,7 +742,7 @@ AuraKit is built on the bridge that Aura Browser and the App Clip inject into tr
 | Function | Returns |
 | --- | --- |
 | `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass, contacts, keyboard }` |
-| `Aura.deviceInfo()` | `{ userId, vendorId, model, systemName, systemVersion, appClip }` |
+| `Aura.deviceInfo()` | `{ userId, vendorId, model, systemName, systemVersion, appClip, modelIdentifier, modelName, idiom, screen, appearance, locale }` (see [section 12](#12-device-info-aurakitdevice); older Aura versions return only the first six) |
 | `Aura.haptic(type, options)` / `Aura.haptic({ type: 'pattern', events })` | `impact` (`style`, `intensity`), `notification` (`style`), `selection`, or a pattern. |
 | `Aura.prepareHaptics()` | — |
 | `Aura.bluetooth.state()`, `requestDevice(o)`, `scan(o)`, `stopScan()`, `connect(id, o)`, `disconnect(id)`, `read(id, s, c)`, `write(id, s, c, data, o)`, `startNotifications(id, s, c)`, `stopNotifications(id, s, c)` | See [section 6](#6-bluetooth-le-aurakitble). |

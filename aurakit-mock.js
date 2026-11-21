@@ -320,7 +320,31 @@
         statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, contacts: true, keyboard: true });
     },
     deviceInfo: function () {
-      return ok({ userId: appClip ? 'MOCK-TAG-ID' : 'MOCK-USER-ID', vendorId: 'MOCK-' + me, model: 'Simulator', systemName: 'Web', systemVersion: '1', appClip: appClip });
+      var dark = !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+      var mq = function (q) { return !!(window.matchMedia && matchMedia(q).matches); };
+      var dpr = window.devicePixelRatio || 1;
+      var langs = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en']).slice();
+      var resolved = Intl.DateTimeFormat().resolvedOptions();
+      var h12 = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hour12;
+      return ok({
+        userId: appClip ? 'MOCK-TAG-ID' : 'MOCK-USER-ID', vendorId: 'MOCK-' + me, model: 'Simulator', systemName: 'Web', systemVersion: '1', appClip: appClip,
+        modelIdentifier: 'Mock1,1', modelName: 'Simulator', idiom: 'phone',
+        screen: {
+          width: screen.width, height: screen.height,
+          nativeWidth: Math.round(Math.min(screen.width, screen.height) * dpr), nativeHeight: Math.round(Math.max(screen.width, screen.height) * dpr),
+          scale: dpr, maxFrameRate: 60, safeArea: { top: 0, left: 0, bottom: 0, right: 0 },
+          orientation: screen.width > screen.height ? 'landscapeLeft' : 'portrait'
+        },
+        appearance: {
+          colorScheme: dark ? 'dark' : 'light', contentSize: 'l', boldText: false,
+          reduceMotion: mq('(prefers-reduced-motion: reduce)'), reduceTransparency: mq('(prefers-reduced-transparency: reduce)'),
+          increaseContrast: mq('(prefers-contrast: more)'), voiceOver: false, invertColors: mq('(inverted-colors: inverted)')
+        },
+        locale: {
+          languages: langs, language: langs[0].split('-')[0], region: langs[0].split('-')[1] || null, currency: null,
+          timeZone: resolved.timeZone, hourCycle: h12 ? '12h' : '24h', measurementSystem: 'metric', firstWeekday: 'monday'
+        }
+      });
     },
     haptic: function (type, options) { log('haptic', type, options || ''); return ok(); },
     prepareHaptics: function () { return ok(); },
