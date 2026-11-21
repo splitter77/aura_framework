@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title data-en="Keyboard">Clavier</title>
+  <link rel="stylesheet" href="../aurakit-ui.css">
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <script src="../aurakit-mock.js"></script>
+  <script src="../aurakit.js"></script>
+  <script src="../aurakit-ui.js"></script>
+  <style>
+    body.ak { padding-bottom: calc(var(--ak-safe-bottom) + 90px); }
+    #editor { min-height: 110px; outline: none; font-size: 17px; line-height: 1.5; -webkit-user-select: text; user-select: text; }
+    #editor:empty::before { content: attr(data-placeholder); color: var(--ak-muted); }
+    #messages { display: flex; flex-direction: column; gap: 6px; }
+    .bubble { align-self: flex-end; max-width: 80%; background: var(--ak-accent); color: #fff; border-radius: 18px; padding: 8px 12px; overflow-wrap: anywhere; }
+    /* Input bar glued to the keyboard: AuraKit.keyboard.stick() sets position and bottom. */
+    .composer { left: 0; right: 0; z-index: 10; display: flex; gap: 8px; padding: 8px 12px calc(8px + var(--ak-safe-bottom));
+                background: rgba(28, 28, 30, .9); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+    html.aura-keyboard-visible .composer { padding-bottom: 8px; }
+    .composer .ak-input { flex: 1; min-width: 0; border-radius: 20px; }
+    .composer .ak-btn { flex: none; border-radius: 20px; }
+  </style>
+</head>
+<body class="ak">
+  <a class="ak-back" href="./" data-en="‹ Examples">‹ Exemples</a>
+  <h1 data-en="Keyboard">Clavier</h1>
+  <div class="ak-card ak-kv" id="state">…</div>
+
+  <h2 data-en="Formatting bar">Barre de mise en forme</h2>
+  <div class="ak-card">
+    <div id="editor" contenteditable="true" autocapitalize="sentences"
+         data-placeholder="Touchez ici, puis B, I, U au-dessus du clavier…"
+         data-en-placeholder="Tap here, then B, I, U above the keyboard…"></div>
+  </div>
+
+  <h2 data-en="Your own buttons">Vos propres boutons</h2>
+  <div class="ak-card">
+    <input class="ak-input" id="note" placeholder="Une note…" data-en-placeholder="A note…" style="width:100%;box-sizing:border-box">
+  </div>
+
+  <h2 data-en="No bar, closes on scroll">Sans barre, se ferme au défilement</h2>
+  <div class="ak-card">
+    <input class="ak-input" id="search" type="search" enterkeyhint="search" placeholder="Recherche" data-en-placeholder="Search" style="width:100%;box-sizing:border-box">
+  </div>
+
+  <h2 data-en="Messages">Messages</h2>
+  <div class="ak-card" id="messages"><span class="ak-muted" data-en="The bar at the bottom follows the keyboard.">La barre du bas suit le clavier.</span></div>
+
+  <form class="composer" id="composer">
+    <input class="ak-input" id="message" enterkeyhint="send" autocomplete="off" placeholder="Message" data-en-placeholder="Message">
+    <button class="ak-btn primary" data-en="Send">Envoyer</button>
+  </form>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const kb = AuraKit.keyboard;
+
+    // 1. Bold, italic, underline… highlighted with the selection, plus a close button.
+    kb.formatting('#editor');
+
+    // 2. One field, its own buttons. onTap keeps the keyboard open and the selection.
+    const insert = (text) => {
+      const el = $('note'), at = el.selectionStart ?? el.value.length;
+      el.value = el.value.slice(0, at) + text + el.value.slice(el.selectionEnd ?? at);
+      el.selectionStart = el.selectionEnd = at + text.length;
+    };
+    kb.bind('#note', {
+      style: 'bar',
+      items: [
+        { id: 'check', symbol: 'checkmark.circle', onTap: () => insert('✓ ') },
+        { id: 'star', symbol: 'star', onTap: () => insert('★ ') },
+        { id: 'time', symbol: 'clock', onTap: () => insert(new Date().toLocaleTimeString().slice(0, 5) + ' ') },
+        { type: 'space' },
+        { id: 'done', title: t('OK', 'Done'), action: 'hide' },
+      ],
+    });
+
+    // 3. A search field: no bar at all, and the keyboard closes when the page scrolls.
+    kb.bind('#search', 'none');
+    kb.dismissOnScroll('onDrag');
+
+    // 4. An input bar glued to the keyboard, like Messages.
+    kb.stick('#composer');
+    $('composer').onsubmit = (e) => {
+      e.preventDefault();
+      const text = $('message').value.trim();
+      if (!text) return;
+      const first = $('messages').querySelector('.ak-muted');
+      if (first) first.remove();
+      const b = document.createElement('div');
+      b.className = 'bubble';
+      b.textContent = text;
+      $('messages').appendChild(b);
+      $('message').value = '';
+    };
+
+    // Live state: native means Aura changes the bar; otherwise the height comes from visualViewport.
+    const show = (s) => {
+      $('state').textContent = [
+        (kb.supported ? t('Barre native', 'Native bar') : t('Sans Aura : hauteur seulement', 'No Aura: height only')),
+        (s.visible ? t('ouvert', 'open') : t('fermé', 'closed')),
+        Math.round(s.height || 0) + ' px',
+      ].join(' · ');
+    };
+    kb.watch(show).then(show);
+  </script>
+</body>
+</html>

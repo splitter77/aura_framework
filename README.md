@@ -14,6 +14,7 @@ It is one script with no dependencies and no build step. It wraps the native `wi
 | `AuraKit.statusBar` | Show or hide the iOS status bar at any time (`hide()`, `show()`, `toggle()`). |
 | `AuraKit.orientation` | Lock the screen rotation (`lock('portrait')`, `lock()` = as it is now, `unlock()`). |
 | `AuraKit.volumeButtons` | The volume buttons as triggers, without changing the volume or showing the iOS indicator. |
+| `AuraKit.keyboard` | Native buttons above the keyboard, text formatting bar, input bar glued to the keyboard. |
 | `AuraKit.experimental.glass` | **Experimental.** Native Liquid Glass buttons (iOS 26) over HTML elements: `<button data-aura-glass>`. |
 | `AuraKit.camera` | Camera, torch, JPEG snapshots. |
 | `AuraKit.device()` | Device identifiers. |
@@ -96,6 +97,7 @@ The link, messages, shared state, rooms and iframes work between the two tabs. H
 | [`examples/haptics.html`](examples/haptics.html) | Every haptic, presets, Morse, played here or on the other iPhone |
 | [`examples/sensors.html`](examples/sensors.html) | Environment, device identifiers, proximity, camera, torch, photo sent to the other iPhone |
 | [`examples/screen.html`](examples/screen.html) | Status bar, rotation lock, volume buttons as triggers |
+| [`examples/keyboard.html`](examples/keyboard.html) | Formatting bar, your own buttons above the keyboard, input bar glued to the keyboard |
 | [`examples/glass.html`](examples/glass.html) | Liquid Glass buttons (experimental): styles, symbols, fixed bar, scrolling |
 | [`examples/bluetooth.html`](examples/bluetooth.html) | Scan, connect, notifications, write, PeekSmith |
 | [`examples/peek.html`](examples/peek.html) | AuraPeek: text, cards, brightness, rotation |

@@ -273,7 +273,7 @@
     version: 1,
     capabilities: function () {
       return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true,
-        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false });
+        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, keyboard: true });
     },
     deviceInfo: function () {
       return ok({ userId: appClip ? 'MOCK-TAG-ID' : 'MOCK-USER-ID', vendorId: 'MOCK-' + me, model: 'Simulator', systemName: 'Web', systemVersion: '1', appClip: appClip });
@@ -282,6 +282,47 @@
     prepareHaptics: function () { return ok(); },
     on: function (name, fn) { (listeners[name] = listeners[name] || []).push(fn); return function () { Aura.off(name, fn); }; },
     off: function (name, fn) { listeners[name] = (listeners[name] || []).filter(function (f) { return f !== fn; }); },
+    // Aura.keyboard : pas de barre native ici (journalisée) ; la hauteur vient de visualViewport
+    // (clavier virtuel d'un téléphone ou d'une tablette), --aura-keyboard-height est tenu à jour.
+    keyboard: (function () {
+      var state = { visible: false, height: 0, accessoryHeight: 0, duration: 0.25 };
+      var watching = false, toolbarItems = null;
+      var css = function () {
+        var root = document.documentElement;
+        root.style.setProperty('--aura-keyboard-height', state.height + 'px');
+        root.style.setProperty('--aura-keyboard-duration', state.duration + 's');
+        root.classList.toggle('aura-keyboard-visible', state.visible);
+      };
+      var measure = function () {
+        var vv = window.visualViewport;
+        if (!watching || !vv) return;
+        var height = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        if (height < 80) height = 0;                       // barres du navigateur, pas un clavier
+        if (height === state.height) return;
+        var was = state.visible;
+        state = { visible: height > 0, height: height, accessoryHeight: toolbarItems ? 64 : 0, duration: 0.25 };
+        css();
+        if (state.visible !== was) emit(state.visible ? 'keyboard.show' : 'keyboard.hide', state);
+        emit('keyboard.change', state);
+      };
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', measure);
+      return {
+        watch: function () { watching = true; css(); measure(); return ok(state); },
+        unwatch: function () { watching = false; return ok(); },
+        state: function () { return ok(state); },
+        hide: function () { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); return ok(); },
+        set: function (o) { log('keyboard.set', o || {}); return ok({ accessory: (o && o.accessory) || 'default', dismissMode: (o && o.dismissMode) || 'none' }); },
+        toolbar: function (o) {
+          o = Array.isArray(o) ? { items: o } : (o || {});
+          toolbarItems = o.items || [];
+          log('keyboard toolbar (call Aura._mockTap(id) to simulate a tap)', toolbarItems);
+          return ok({ accessory: 'toolbar', dismissMode: 'none' });
+        },
+        update: function (id, changes) { log('keyboard toolbar update', id, changes || {}); return ok(); },
+        reset: function () { toolbarItems = null; return ok(); },
+      };
+    })(),
+    _mockTap: function (id) { emit('keyboard.toolbar.tap', { id: String(id) }); },
     proximity: {
       start: function () { proxOn = true; log('proximity watched — press P to cover / uncover the sensor'); return ok({ supported: true, near: near }); },
       stop: function () { proxOn = false; return ok(); },

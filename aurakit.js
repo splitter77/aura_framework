@@ -10,6 +10,7 @@
  *   AuraKit.statusBar     show or hide the iOS status bar at any time
  *   AuraKit.orientation   lock the screen rotation
  *   AuraKit.volumeButtons the volume buttons as triggers
+ *   AuraKit.keyboard      bar above the keyboard, text formatting, input bar glued to the keyboard
  *   AuraKit.experimental.glass   EXPERIMENTAL native Liquid Glass buttons over HTML elements
  *   AuraKit.camera        camera, torch, snapshots
  *   AuraKit.device()      device identifiers
@@ -48,7 +49,8 @@
 
   // Every native event, re-emitted here (works the same in iframes).
   var EVENTS = ['peer.connected', 'peer.message', 'peer.disconnected', 'bluetooth.discovered',
-    'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity', 'volumeButton', 'glass.tap'];
+    'bluetooth.notification', 'bluetooth.state', 'bluetooth.disconnected', 'proximity', 'volumeButton', 'glass.tap',
+    'keyboard.show', 'keyboard.hide', 'keyboard.change', 'keyboard.toolbar.tap'];
   var bus = new Emitter();
   var native = function () { return window.Aura || null; };
   (function subscribeNative() {
@@ -650,6 +652,209 @@
     var go = function () { if (document.querySelector('[data-aura-glass]')) glass.attachAll().catch(function (e) { console.warn('[AuraKit] glass:', e.message); }); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else setTimeout(go, 0);
   })();
+
+  // ------------------------------------------------------------------ Keyboard
+  // Main frame only: the bar above the keyboard and the keyboard height belong to the web view.
+  // Outside Aura, watch() and stick() fall back to visualViewport and the rest does nothing.
+  var kbWatchers = new Set();
+  var kbHandlers = {};
+  var kbFallback = null;
+  var kbNative = function (e) { return !!(e && e.available && mode === 'native' && e.caps && e.caps.keyboard); };
+  var kbCSS = function (s) {
+    var r = document.documentElement;
+    r.style.setProperty('--aura-keyboard-height', (s.height || 0) + 'px');
+    r.style.setProperty('--aura-keyboard-duration', (s.duration || 0.25) + 's');
+    r.classList.toggle('aura-keyboard-visible', !!s.visible);
+  };
+  var kbApply = function (s) {
+    s = s || {};
+    keyboard.visible = !!s.visible;
+    keyboard.height = s.height || 0;
+    keyboard.accessoryHeight = s.accessoryHeight || 0;
+  };
+  bus.on('keyboard.change', kbApply);
+  bus.on('keyboard.toolbar.tap', function (d) {
+    var fn = d && kbHandlers[d.id];
+    if (fn) { try { fn(d); } catch (err) { console.error('[AuraKit]', err); } }
+  });
+
+  function kbFallbackStart() {
+    var vv = window.visualViewport;
+    if (!vv || kbFallback) return;
+    kbFallback = function () {
+      var h = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      if (h < 80) h = 0;                                   // browser bars, not a keyboard
+      if (h === keyboard.height) return;
+      var was = keyboard.visible;
+      var s = { visible: h > 0, height: h, accessoryHeight: 0, duration: 0.25 };
+      kbCSS(s);
+      if (s.visible !== was) bus.emit(s.visible ? 'keyboard.show' : 'keyboard.hide', s);
+      bus.emit('keyboard.change', s);
+    };
+    vv.addEventListener('resize', kbFallback);
+    vv.addEventListener('scroll', kbFallback);
+    kbCSS({ visible: false, height: 0 });
+    kbFallback();
+  }
+  function kbFallbackStop() {
+    var vv = window.visualViewport;
+    if (!vv || !kbFallback) return;
+    vv.removeEventListener('resize', kbFallback);
+    vv.removeEventListener('scroll', kbFallback);
+    kbFallback = null;
+  }
+  function kbSet(o) {
+    return ready().then(function (e) { return kbNative(e) ? call('keyboard.set', o) : null; });
+  }
+  var FORMAT_ITEMS = {
+    bold: { symbol: 'bold' }, italic: { symbol: 'italic' }, underline: { symbol: 'underline' },
+    strikeThrough: { symbol: 'strikethrough' }, insertUnorderedList: { symbol: 'list.bullet' },
+    insertOrderedList: { symbol: 'list.number' }, link: { symbol: 'link' },
+  };
+
+  var keyboard = {
+    visible: false,
+    height: 0,
+    accessoryHeight: 0,
+    /** true when Aura can change the bar above the keyboard (known after AuraKit.ready()). */
+    get supported() { return kbNative(env); },
+    /** fn({ visible, height, accessoryHeight, duration }) on each change. Resolves to { native, visible, height, stop() }.
+     *  While watched, --aura-keyboard-height, --aura-keyboard-duration and html.aura-keyboard-visible are kept up to date. */
+    watch: async function (fn) {
+      var e = await ready();
+      var off = typeof fn === 'function' ? bus.on('keyboard.change', fn) : function () {};
+      kbWatchers.add(off);
+      var native = kbNative(e);
+      if (native) {
+        try { kbApply(await call('keyboard.watch')); } catch (err) { off(); kbWatchers.delete(off); throw err; }
+      } else {
+        kbFallbackStart();
+      }
+      return {
+        native: native, visible: keyboard.visible, height: keyboard.height,
+        stop: function () {
+          if (!kbWatchers.has(off)) return;
+          off(); kbWatchers.delete(off);
+          if (kbWatchers.size) return;
+          if (native) quiet(call('keyboard.unwatch')); else kbFallbackStop();
+        },
+      };
+    },
+    /** 'show', 'hide' or 'change' (call watch() first). Returns off(). */
+    on: function (name, fn) { return bus.on('keyboard.' + name, fn); },
+    /** Closes the keyboard. */
+    hide: async function () {
+      var el = document.activeElement;
+      if (el && el !== document.body && typeof el.blur === 'function') el.blur();
+      var e = await ready();
+      if (kbNative(e)) await call('keyboard.hide');
+    },
+    /** Native buttons above the keyboard. Items: { id, symbol, title, selected, enabled, tint, label, action: 'hide', onTap }
+     *  or { type: 'space' } / { type: 'fixedSpace', width }. Options: { items, style: 'glass' | 'bar', tint }.
+     *  Resolves to { native, update(id, changes), remove() }. */
+    toolbar: async function (options) {
+      var o = Array.isArray(options) ? { items: options } : Object.assign({}, options);
+      kbHandlers = {};
+      o.items = (o.items || []).map(function (item) {
+        var copy = Object.assign({}, item);
+        if (typeof copy.onTap === 'function' && copy.id != null) kbHandlers[String(copy.id)] = copy.onTap;
+        delete copy.onTap;
+        return copy;
+      });
+      if (o.onTap) delete o.onTap;
+      var e = await ready();
+      var native = kbNative(e);
+      if (native) await call('keyboard.toolbar', o);
+      return {
+        native: native,
+        update: function (id, changes) { return native ? call('keyboard.update', String(id), changes || {}) : Promise.resolve(); },
+        remove: function () { kbHandlers = {}; return kbSet({ accessory: 'default' }); },
+      };
+    },
+    /** One button: AuraKit.keyboard.update('bold', { selected: true }). */
+    update: function (id, changes) {
+      return ready().then(function (e) { return kbNative(e) ? call('keyboard.update', String(id), changes || {}) : null; });
+    },
+    /** No bar above the keyboard. */
+    none: function () { return kbSet({ accessory: 'none' }); },
+    /** WebKit's bar back (⌃ ⌄ Done). */
+    restore: function () { kbHandlers = {}; return kbSet({ accessory: 'default' }); },
+    /** 'none', 'onDrag' (closes when the page scrolls) or 'interactive' (drag the page down to pull the keyboard away). */
+    dismissOnScroll: function (mode) { return kbSet({ dismissMode: mode === true ? 'interactive' : mode === false ? 'none' : String(mode || 'interactive') }); },
+    /** Raw settings: { accessory: 'default' | 'none' | 'toolbar', dismissMode }. */
+    set: kbSet,
+    /** Gives one field (or every field inside an element) its own bar while it has the focus:
+     *  bar = toolbar options, 'none' or 'default'. Returns unbind(). */
+    bind: function (target, bar) {
+      var el = typeof target === 'string' ? document.querySelector(target) : target;
+      if (!el) throw new Error('AuraKit.keyboard.bind: element not found.');
+      var focusIn = function () {
+        if (bar === 'none') quiet(keyboard.none());
+        else if (bar === 'default' || !bar) quiet(keyboard.restore());
+        else quiet(keyboard.toolbar(typeof bar === 'function' ? bar() : bar));
+      };
+      var focusOut = function (ev) {
+        if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+        if (bar !== 'default') quiet(keyboard.restore());
+      };
+      el.addEventListener('focusin', focusIn);
+      el.addEventListener('focusout', focusOut);
+      if (el.contains(document.activeElement)) focusIn();
+      return function () { el.removeEventListener('focusin', focusIn); el.removeEventListener('focusout', focusOut); };
+    },
+    /** Text formatting bar for a contenteditable element: bold, italic… kept in sync with the selection.
+     *  Options: { items: ['bold', 'italic', 'underline', 'strikeThrough', 'insertUnorderedList', 'insertOrderedList', 'link'],
+     *  style, tint, done: true, extra: [more items, before the space] }. Returns unbind(). */
+    formatting: function (target, options) {
+      var o = options || {};
+      var el = typeof target === 'string' ? document.querySelector(target) : target;
+      if (!el) throw new Error('AuraKit.keyboard.formatting: element not found.');
+      var names = o.items || ['bold', 'italic', 'underline', 'strikeThrough', 'insertUnorderedList', 'link'];
+      var toggles = names.filter(function (n) { return n !== 'link' && FORMAT_ITEMS[n]; });
+      var sync = function () {
+        if (!el.contains(document.activeElement) && document.activeElement !== el) return;
+        toggles.forEach(function (n) {
+          var on = false;
+          try { on = document.queryCommandState(n); } catch (err) {}
+          quiet(keyboard.update(n, { selected: on }));
+        });
+      };
+      var items = names.filter(function (n) { return FORMAT_ITEMS[n]; }).map(function (n) {
+        return Object.assign({ id: n, onTap: function () {
+          if (n === 'link') {
+            var url = window.prompt('URL', 'https://');
+            if (url) document.execCommand('createLink', false, url);
+          } else {
+            document.execCommand(n);
+          }
+          sync();
+        } }, FORMAT_ITEMS[n]);
+      }).concat(o.extra || []);
+      if (o.done !== false) {
+        items.push({ type: 'space' });
+        items.push({ id: 'done', symbol: 'keyboard.chevron.compact.down', action: 'hide', label: 'Done' });
+      }
+      var unbind = keyboard.bind(el, function () { return { items: items, style: o.style || 'glass', tint: o.tint }; });
+      var onFocus = function () { setTimeout(sync, 50); };
+      document.addEventListener('selectionchange', sync);
+      el.addEventListener('focusin', onFocus);
+      return function () { unbind(); document.removeEventListener('selectionchange', sync); el.removeEventListener('focusin', onFocus); };
+    },
+    /** Keeps a fixed element (input bar, buttons) right above the keyboard, like Messages. Returns stop(). */
+    stick: function (target, options) {
+      var o = options || {};
+      var el = typeof target === 'string' ? document.querySelector(target) : target;
+      if (!el) throw new Error('AuraKit.keyboard.stick: element not found.');
+      var offset = o.offset || 0;
+      el.style.position = 'fixed';
+      el.style.bottom = 'calc(var(--aura-keyboard-height, 0px) + ' + offset + 'px)';
+      el.style.transition = 'bottom var(--aura-keyboard-duration, .25s) cubic-bezier(.25, 1, .5, 1)';
+      var watcher = null, stopped = false;
+      keyboard.watch().then(function (w) { if (stopped) w.stop(); else watcher = w; });
+      var unbind = o.hideBar === false ? null : keyboard.bind(el, 'none');
+      return function () { stopped = true; if (watcher) watcher.stop(); if (unbind) unbind(); };
+    },
+  };
 
   // ------------------------------------------------------------------ Camera / torch
   var camera = {
@@ -1258,7 +1463,7 @@
     get isAppClip() { return !!(env && env.appClip); },
     get isBrowser() { return !!(env && env.browser); },
     get inFrame() { return inFrame; },
-    /** Native events (bluetooth.*, proximity, volumeButton, peer.*). Returns off(). */
+    /** Native events (bluetooth.*, proximity, volumeButton, keyboard.*, peer.*). Returns off(). */
     on: function (name, fn) { return bus.on(name, fn); },
     off: function (name, fn) { bus.off(name, fn); },
     /** Raw call: AuraKit.call('bluetooth.state'). */
@@ -1270,6 +1475,7 @@
     statusBar: statusBar,
     orientation: orientation,
     volumeButtons: volumeButtons,
+    keyboard: keyboard,
     /** Features that may change or not work everywhere yet. */
     experimental: { glass: glass },
     camera: camera,
