@@ -79,7 +79,7 @@ The page must be opened in Aura or the App Clip (HTTPS, trusted domain), in the 
 | `new AuraMysterBox(options)`, then `connect()` | Same, with the time to register `status` and `connect` listeners first. |
 | `AuraMysterBox.scan(onDevice)` | Every box has the same name: lists them with `onDevice(device, seen)`. Resolves to `stop()`. Connect with `{ id: device.id }`. |
 | `AuraMysterBox.isAvailable()` | The bridge is present. |
-| `disconnect()` | Disconnects and stops reconnecting. The screen keeps its content. |
+| `disconnect()` | Disconnects and stops reconnecting; resolves once iOS has closed the link (2 s at most). The screen keeps its content. `connect()` can follow right away. |
 | `connected`, `id`, `name` | Connection. |
 | `info` | `{ version, board, watch, width, height, motor, sd, root, imu, audio, volume, rotation, position, battery, fields, raw }`, read when connecting. |
 | `width`, `height`, `hasMotor`, `position` | Shortcuts; `position` follows the events. |

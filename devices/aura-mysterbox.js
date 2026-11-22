@@ -276,6 +276,7 @@
       this._motionHz = 0;
       this._manual = false;
       this._connecting = null;
+      this._closing = null;          // a disconnection that iOS has not finished yet
       this._cancelFind = null;
       this._reconnecting = false;
       this._unsubscribers = [];
@@ -315,6 +316,8 @@
         this._emit('status', { state: 'scanning' });
         this.id = (await this._find()).id;
       }
+      // Its late 'bluetooth.disconnected' would make iOS refuse this connection, or drop it right after.
+      if (this._closing) await this._closing;
       checkCancelled();
       this._emit('status', { state: 'connecting', name: this.name, id: this.id });
       try {
@@ -336,8 +339,10 @@
         await this.readStatus();
         checkCancelled();
       } catch (e) {
+        const linked = this._link;
         this._dropped();
-        if (this.id) { try { await bt.disconnect(this.id); } catch (_) {} }
+        if (linked) this._close(this.id);         // not awaited: the next connection waits for it
+        else if (this.id) { try { await bt.disconnect(this.id); } catch (_) {} }
         throw this._bridgeError(e);
       }
       this.connected = true;
@@ -351,10 +356,27 @@
       if (this._cancelFind) this._cancelFind();
       const active = this._link;
       this._dropped();
-      if (active && this.id) {
-        try { await global.Aura.bluetooth.disconnect(this.id); } catch (_) {}
-      }
+      if (active && this.id) await this._close(this.id);
       this._emit('status', { state: 'disconnected' });
+    }
+
+    /**
+     * Disconnects and resolves once iOS reports it ('bluetooth.disconnected' comes after bluetooth.disconnect()
+     * returns), or after CLOSE_TIMEOUT. connect() waits for it too.
+     */
+    _close(id) {
+      const closing = new Promise((resolve) => {
+        const done = () => { clearTimeout(timer); offs.forEach((off) => off()); resolve(); };
+        const offs = [
+          global.Aura.on('bluetooth.disconnected', (d) => { if (d.id === id) done(); }),
+          global.Aura.on('bluetooth.state', (d) => { if (d && d.state !== 'poweredOn') done(); }),
+        ];
+        const timer = setTimeout(done, AuraMysterBox.CLOSE_TIMEOUT);
+      });
+      this._closing = closing;
+      closing.then(() => { if (this._closing === closing) this._closing = null; });
+      Promise.resolve().then(() => global.Aura.bluetooth.disconnect(id)).catch(() => {});
+      return closing;
     }
 
     /** The box forgets some settings (rotation, motion stream): send back what the page chose. */
@@ -973,6 +995,7 @@
   AuraMysterBox.PERMISSION_TIMEOUT = 60;   // seconds
   AuraMysterBox.REPLY_TIMEOUT = 10000;     // ms
   AuraMysterBox.UPLOAD_TIMEOUT = 20000;    // ms
+  AuraMysterBox.CLOSE_TIMEOUT = 2000;      // ms: longest wait for iOS to report a disconnection
   AuraMysterBox.crc32 = crc32;
   AuraMysterBox.parseStatus = parseStatus;
   AuraMysterBox.parseEvent = parseEvent;
