@@ -209,7 +209,9 @@
           fit: $('cover').checked ? 'cover' : 'contain',
           onProgress: (p) => { $('progress').textContent = Math.round(p * 100) + ' %'; },
         });
-        $('progress').textContent = sent.name + ' · ' + Math.round(sent.size / 1024) + t(' Ko', ' KB');
+        $('progress').textContent = sent.shown
+          ? sent.name + ' · ' + Math.round(sent.size / 1024) + t(' Ko', ' KB')
+          : t('Image non affichée : écran changé entre-temps', 'Picture not shown: the screen changed meanwhile');
       } finally { $('file').value = ''; }
     });
 

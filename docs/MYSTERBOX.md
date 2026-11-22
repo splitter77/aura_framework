@@ -146,13 +146,21 @@ await box.showImage('queen.jpg', { only: true });
 
 | Method | Meaning |
 | --- | --- |
-| `showPicture(source, options)` | Fits, uploads and shows a picture, alternating two file names so the current one stays until the next is ready. Takes the options of `fitImage` and `upload`, plus `only` (`true`). |
+| `showPicture(source, options)` | Fits, uploads and shows a picture, alternating two file names so the current one stays until the next is ready. Takes the options of `fitImage` and `upload`, plus `only` (`true`). Resolves to `{ shown: true, name, size }`, or `{ shown: false }` when outdated (see below). |
 | `fitImage(source, { fit, background, quality })` | JPEG `Blob` of exactly the screen size, about 80 KB at most. `source`: `Blob`, URL (CORS), `<img>` or canvas. `fit`: `'contain'` (default) or `'cover'`. |
 | `upload(name, data, { onProgress, retries })` | `data`: `Blob`, `ArrayBuffer`, typed array or bytes. `onProgress(fraction, sent, total)`. Resolves once the box has checked the CRC. |
 | `showImage(name, { only })` | Shows an uploaded image; `only: true` clears the text. |
 | `preloadImage(name)` | Decodes it in advance; the box keeps 4 images. |
 | `hideImage()` | Hides the image. |
 | `deleteFile(name)` | Deletes a file. |
+
+The screen command called last wins over a `showPicture()` still in progress:
+
+- After `black()`, `fill()`, `mode()`, `card()`, `hideImage()`, `showImage()`, `text(…, { only: true })` or a disconnection, the picture is not shown and `showPicture()` resolves to `{ shown: false }`. An upload already started may finish, without being shown.
+- After a plain `text()`, the picture is shown under that text, which is not cleared.
+- Several `showPicture()` are shown one after the other, in order; the commands above drop all those called before them.
+
+Only commands sent through the same `AuraMysterBox` object count: the driver does not know what is done on the box itself.
 
 Names have 1 to 48 letters, digits, `.`, `_` or `-`. Images are baseline JPEG or PNG and are not scaled by the box. Uploads run one after the other, at 18 KB/s at most on iPhone: count at least 4 s for 80 KB, and prepare files before performing.
 

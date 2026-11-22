@@ -115,6 +115,11 @@
   const defaultLang = () =>
     ((global.navigator && navigator.language) || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en';
 
+  // Commands that decide what is on screen: a showPicture() called earlier must not draw over them.
+  const TAKES_SCREEN = new Set([OP.BLACK, OP.FILL, OP.MODE, OP.CARD, OP.SHOW_IMAGE, OP.HIDE_IMAGE]);
+  // A write that does not start with an opcode is shown as text.
+  const setsText = (op) => op === OP.TEXT || op === OP.STYLED_TEXT || op >= 0x20;
+
   const sameUUID = (a, b) => String(a || '').toUpperCase() === String(b || '').toUpperCase();
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const encoder = new TextEncoder();
@@ -266,6 +271,8 @@
       this._points = [];
       this._pointTimer = null;
       this._slot = 'b';
+      this._screen = 0;              // changes when showPicture() calls in progress become outdated
+      this._text = 0;                // changes with the text layer
       this._motionHz = 0;
       this._manual = false;
       this._connecting = null;
@@ -445,6 +452,7 @@
       this.connected = false;
       this._link = false;
       this._session++;
+      this._screen++;                // no picture chosen before a disconnection appears after it
       clearTimeout(this._pointTimer);
       this._pointTimer = null;
       this._points = [];
@@ -546,6 +554,9 @@
       if (!bytes.length) throw new Error(this._t.badValue('send()', '""'));
       const max = withoutResponse ? PACKET : MAX_COMMAND;     // iOS silently drops longer writes without response
       if (bytes.length > max) throw new Error(this._t.tooLong(bytes.length, max));
+      // Counted when called, not when written: showPicture() checks while this may still be queued.
+      if (TAKES_SCREEN.has(bytes[0])) this._screen++;
+      if (setsText(bytes[0])) this._text++;
       if (bytes[0] !== OP.POINTS) this._flushPoints().catch((e) => this._emit('error', { error: e }));
       return this._enqueue(async () => {
         await this._write(COMMAND, bytes, withoutResponse);
@@ -755,6 +766,8 @@
 
     /** Shows an uploaded image. Image and text are layers: only = true also clears the text. */
     async showImage(name, { only = false } = {}) {
+      this._fileName(name);
+      this._screen++;
       const jobs = [this._image(OP.SHOW_IMAGE, name)];
       if (only) jobs.push(this.text(''));
       return (await Promise.all(jobs))[0];
@@ -812,16 +825,30 @@
       }
     }
 
-    /** fitImage + upload + showImage, alternating two names so the current picture stays until the new one is ready. */
+    /**
+     * fitImage + upload + show, alternating two names so the current picture stays until the new one is ready.
+     * A later black(), fill(), mode(), card(), hideImage(), showImage() or text(…, { only: true }) wins:
+     * resolves { shown: false }. A later text() stays over the picture.
+     */
     async showPicture(source, options = {}) {
+      const screen = this._screen, text = this._text;     // at the call, not when its turn comes
+      const outdated = () => screen !== this._screen;
       const run = this._pictures.then(async () => {
+        if (outdated()) return { shown: false };
         const jpeg = await this.fitImage(source, options);
         const slot = this._slot === 'a' ? 'b' : 'a';
         const name = `aura-${slot}.jpg`;
+        if (outdated()) return { shown: false };
         await this.upload(name, jpeg, options);
-        await this.showImage(name, { only: options.only !== false });
+        if (outdated()) return { shown: false };
+        // No await between that check and queueing both writes. Neither counts as a change made by the page.
+        const jobs = [this._image(OP.SHOW_IMAGE, name)];
+        if (options.only !== false && text === this._text) {
+          jobs.push(this._enqueue(() => this._write(COMMAND, Uint8Array.from([OP.TEXT]), false)));
+        }
+        await Promise.all(jobs);
         this._slot = slot;
-        return { name, size: jpeg.size };
+        return { shown: true, name, size: jpeg.size };
       });
       this._pictures = run.catch(() => {});
       return run;
