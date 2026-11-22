@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Aura MysterBox</title>
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); background: #000; color: #eee; font: 16px -apple-system, system-ui, sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8e8e93; margin: 0 0 8px; font-weight: 600; }
+    section { background: #1c1c1e; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    button, input, select, textarea { font: inherit; border-radius: 8px; border: 0; padding: 10px 12px; box-sizing: border-box; }
+    button { background: #0a84ff; color: #fff; }
+    button.secondary { background: #3a3a3c; }
+    input, select, textarea { background: #2c2c2e; color: #fff; min-width: 0; max-width: 100%; }
+    textarea { width: 100%; resize: vertical; }
+    input[type=range] { width: 100%; padding: 0; }
+    input[type=color] { height: 44px; padding: 4px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+    .row > * { flex: 1; }
+    .hint { font-size: 14px; color: #8e8e93; margin: 8px 0 0; overflow-wrap: anywhere; }
+    #status { font-size: 14px; color: #8e8e93; margin-left: 8px; }
+    label.check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 15px; }
+    #pad { display: block; width: 100%; max-width: 260px; aspect-ratio: 368 / 448; margin: auto; background: #000; border-radius: 16px; touch-action: none; }
+    #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; -webkit-user-select: text; user-select: text; }
+    [disabled] { opacity: .4; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    nav.lang { display: flex; gap: 2px; flex: 0 0 auto; }
+    nav.lang button { background: none; color: #8e8e93; padding: 4px 6px; font-size: 14px; }
+    nav.lang button[aria-current="true"] { color: #fff; font-weight: 600; }
+    #error { display: none; background: #3a1d1d; color: #ff9f99; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MysterBox <span id="status" data-en="disconnected">déconnectée</span></h1>
+    <nav class="lang"><button data-set-lang="fr">FR</button><button data-set-lang="en">EN</button></nav>
+  </header>
+  <div id="error" role="alert"></div>
+
+  <section>
+    <button id="connect" data-en="Connect">Connecter</button>
+    <button id="disconnect" class="secondary" disabled data-en="Disconnect">Déconnecter</button>
+    <p class="hint" id="info" data-en="Turn the box or the watch on with PWR. No pairing needed.">Allumez la box ou la montre avec PWR. Aucun jumelage nécessaire.</p>
+  </section>
+
+  <section>
+    <h2 data-en="Text">Texte</h2>
+    <textarea id="text" rows="2" data-needs>Q♥</textarea>
+    <div class="row">
+      <input id="color" type="color" value="#ffffff" data-needs>
+      <button id="showText" data-needs data-en="Show">Afficher</button>
+      <button id="black" class="secondary" data-needs data-en="Black">Noir</button>
+    </div>
+    <label class="hint"><span data-en="Brightness">Luminosité</span><input id="brightness" type="range" min="0" max="100" value="100" data-needs></label>
+    <div class="row">
+      <select id="rotation" data-needs>
+        <option value="0" data-en="Upright">Droit</option>
+        <option value="1" data-en="90° right">90° à droite</option>
+        <option value="2">180°</option>
+        <option value="3" data-en="90° left">90° à gauche</option>
+      </select>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-en="Live drawing">Dessin en direct</h2>
+    <canvas id="pad" width="368" height="448"></canvas>
+    <div class="row"><button id="clear" class="secondary" data-needs data-en="Clear">Effacer</button></div>
+  </section>
+
+  <section>
+    <h2>Image</h2>
+    <input id="file" type="file" accept="image/*" data-needs>
+    <label class="check"><input id="cover" type="checkbox" data-needs> <span data-en="Fill the screen (crop)">Remplir l'écran (recadrer)</span></label>
+    <p class="hint" id="progress"></p>
+  </section>
+
+  <section>
+    <h2 data-en="Robot, sound, vibration">Robot, son, vibration</h2>
+    <div class="row"><select id="mode" data-needs></select><button id="sendMode" class="secondary" data-needs>OK</button></div>
+    <div class="row"><select id="effect" data-needs></select><button id="sendEffect" class="secondary" data-needs data-en="Play">Jouer</button></div>
+    <div class="row">
+      <input id="card" value="QH" data-needs>
+      <button id="showCard" class="secondary" data-needs data-en="Card in the eyes">Carte dans les yeux</button>
+    </div>
+    <label class="hint"><span data-en="Volume">Volume</span><input id="volume" type="range" min="0" max="100" value="30" data-needs></label>
+    <div class="row">
+      <button id="buzzShort" class="secondary" data-motor data-en="Short">Courte</button>
+      <button id="buzzLong" class="secondary" data-motor data-en="Long">Longue</button>
+      <button id="buzzDouble" class="secondary" data-motor>Double</button>
+    </div>
+    <p class="hint" data-en="Vibration: MysterBox Watch only.">Vibration : MysterBox Watch uniquement.</p>
+  </section>
+
+  <section>
+    <h2 data-en="Sensors">Capteurs</h2>
+    <div class="row"><button id="battery" class="secondary" data-needs data-en="Battery">Batterie</button></div>
+    <label class="check"><input id="motion" type="checkbox" data-needs> <span data-en="Motion stream (10 Hz)">Flux de mouvement (10 Hz)</span></label>
+    <p class="hint" id="motionValue"></p>
+  </section>
+
+  <section>
+    <h2 data-en="Log">Journal</h2>
+    <div id="log"></div>
+  </section>
+
+  <script src="../aurakit-mock.js"></script>
+  <script src="../devices/aura-mysterbox.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    if (typeof window.t !== 'function') window.t = (fr) => fr;
+    // If a script did not load (wrong path, file not uploaded), say so instead of failing silently.
+    const src = (name) => (document.querySelector('script[src*="' + name + '"]') || {}).src || name;
+    const missing = [typeof AuraI18n === 'undefined' && src('aurakit-i18n'), typeof AuraMysterBox === 'undefined' && src('aura-mysterbox')].filter(Boolean);
+    if (missing.length) {
+      $('error').textContent = 'Script(s) introuvable(s) / missing: ' + missing.join(', ');
+      $('error').style.display = 'block';
+      throw new Error('Missing ' + missing.join(', '));
+    }
+    const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent.slice(0, 8000); };
+    const showError = (msg) => { $('error').textContent = msg || ''; $('error').style.display = msg ? 'block' : 'none'; };
+    const run = (fn) => async (e) => { try { showError(''); await fn(e); } catch (err) { showError(err.message); log('⚠️ ' + err.message); } };
+    const STATES = {
+      permission: t('autorisation Bluetooth…', 'Bluetooth permission…'), scanning: t('recherche…', 'searching…'),
+      connecting: t('connexion…', 'connecting…'), connected: t('connectée', 'connected'),
+      reconnecting: t('reconnexion…', 'reconnecting…'), disconnected: t('déconnectée', 'disconnected'),
+    };
+    let box = null, active = false;
+    const pad = $('pad'), ink = pad.getContext('2d');
+
+    const refresh = () => {
+      const on = !!(box && box.connected);
+      document.querySelectorAll('[data-needs]').forEach((el) => { el.disabled = !on; });
+      document.querySelectorAll('[data-motor]').forEach((el) => { el.disabled = !on || !box.hasMotor; });
+      $('connect').disabled = active;
+      $('disconnect').disabled = !active;
+    };
+    for (const [id, table] of [['mode', AuraMysterBox.MODES], ['effect', AuraMysterBox.EFFECTS]]) {
+      for (const name of Object.keys(table)) $(id).add(new Option(name, name));
+    }
+    refresh();
+
+    $('connect').onclick = run(async () => {
+      box = new AuraMysterBox({ lang: AuraI18n.lang });
+      box.on('status', ({ state }) => { $('status').textContent = STATES[state] || state; refresh(); });
+      box.on('connect', ({ info }) => {
+        $('info').textContent = [info.watch ? 'MysterBox Watch' : 'MysterBox', info.version, info.width + ' × ' + info.height,
+          info.battery.percent != null ? info.battery.percent + ' %' : ''].filter(Boolean).join(' · ');
+        pad.width = info.width;
+        pad.height = info.height;
+        pad.style.aspectRatio = info.width + ' / ' + info.height;
+        if (info.volume != null) $('volume').value = info.volume;
+      });
+      box.on('event', ({ type, name, ...data }) => log(name + ' ' + JSON.stringify(data)));
+      box.on('error', ({ error }) => log('⚠️ ' + error.message));
+      box.on('motion', (m) => {
+        $('motionValue').textContent = 'a ' + [m.ax, m.ay, m.az].map((v) => v.toFixed(2)).join(' ') + ' g · ' + m.position;
+      });
+      active = true;
+      refresh();
+      try { await box.connect(); } catch (e) { active = false; $('status').textContent = STATES.disconnected; refresh(); throw e; }
+    });
+    $('disconnect').onclick = run(async () => { active = false; await box.disconnect(); refresh(); });
+
+    $('showText').onclick = run(() => box.text($('text').value, { color: $('color').value, only: true }));
+    $('black').onclick = run(async () => { ink.clearRect(0, 0, pad.width, pad.height); await box.black(); });
+    $('brightness').onchange = run(() => box.brightness($('brightness').value));
+    $('rotation').onchange = run(() => box.rotation(Number($('rotation').value)));
+
+    let last = null;
+    const at = (e) => {
+      const r = pad.getBoundingClientRect();
+      return [Math.round((e.clientX - r.left) * pad.width / r.width), Math.round((e.clientY - r.top) * pad.height / r.height)];
+    };
+    const draw = (p) => {
+      ink.strokeStyle = $('color').value;
+      ink.lineWidth = 6;
+      ink.lineCap = 'round';
+      ink.beginPath();
+      ink.moveTo(...(last || p));
+      ink.lineTo(...p);
+      ink.stroke();
+      box.point(...p);
+      last = p;
+    };
+    pad.onpointerdown = (e) => {
+      if (!box || !box.connected) return;
+      pad.setPointerCapture(e.pointerId);
+      box.pen($('color').value, 6).catch((err) => showError(err.message));
+      last = null;
+      draw(at(e));
+    };
+    pad.onpointermove = (e) => { if (last && box.connected) draw(at(e)); };
+    pad.onpointerup = pad.onpointercancel = run(async () => {
+      if (!last) return;
+      last = null;
+      if (box.connected) await box.penUp();
+    });
+    $('clear').onclick = run(async () => { ink.clearRect(0, 0, pad.width, pad.height); await box.clearDrawing(); });
+
+    $('file').onchange = run(async () => {
+      const file = $('file').files[0];
+      if (!file) return;
+      try {
+        const sent = await box.showPicture(file, {
+          fit: $('cover').checked ? 'cover' : 'contain',
+          onProgress: (p) => { $('progress').textContent = Math.round(p * 100) + ' %'; },
+        });
+        $('progress').textContent = sent.name + ' · ' + Math.round(sent.size / 1024) + t(' Ko', ' KB');
+      } finally { $('file').value = ''; }
+    });
+
+    $('sendMode').onclick = run(() => box.mode($('mode').value));
+    $('sendEffect').onclick = run(() => box.effect($('effect').value));
+    $('showCard').onclick = run(() => box.card($('card').value));
+    $('volume').onchange = run(() => box.volume($('volume').value));
+    $('buzzShort').onclick = run(() => box.vibrate('short'));
+    $('buzzLong').onclick = run(() => box.vibrate('long'));
+    $('buzzDouble').onclick = run(() => box.vibrate('double'));
+    $('battery').onclick = run(() => box.battery());
+    $('motion').onchange = run(() => box.motion($('motion').checked ? 10 : 0));
+
+    if (!AuraMysterBox.isAvailable()) showError(t('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.',
+      'Open this page in Aura (HTTPS, bookmarked domain), or add ?mock=host for the simulator.'));
+  </script>
+</body>
+</html>

@@ -13,7 +13,8 @@
  * Glass buttons (experimental): drawn as CSS glass, outlined in pink, where Aura would put the native ones.
  * Bluetooth LE: "Mock Sensor", with a counter notifying every second (service FFE0, characteristic FFE1),
  * "60BP-MOCK", a Nova pen that writes a random number on a new sheet every few seconds (devices/aura-nova.js),
- * and "MA_Pouce_M0CK01", a PLB thumb button (devices/aura-plb.js): hold B to press its button. */
+ * "MA_Pouce_M0CK01", a PLB thumb button (devices/aura-plb.js): hold B to press its button,
+ * and "MysterBox" (devices/aura-mysterbox.js), with its screen and buttons in a panel (&mysterbox=watch for the Watch). */
 (function () {
   'use strict';
   if (window.Aura) return;
@@ -273,6 +274,175 @@
     return Uint8Array.from(v || []);
   };
 
+  // A MysterBox (devices/aura-mysterbox.js): speaks the binary protocol and draws its screen in a small panel.
+  // Click = tap, drag = swipe. &mysterbox=watch simulates the Watch.
+  var boxId = function (n) { return '7A1D000' + n + '-3B6E-4F2A-9C4D-2E8F1A5B0C01'; };
+  var BOX = { id: 'MOCK-MYSTERBOX-0001', name: 'MysterBox', rssi: -50 };
+  var boxWatch = params.get('mysterbox') === 'watch';
+  var box = { connected: false, events: false, imu: false, files: {}, upload: null, w: boxWatch ? 410 : 368, h: boxWatch ? 502 : 448,
+    volume: 30, light: 100, rot: 0, face: 1, size: 160, color: '#fff', bg: '#000', text: null, image: null, lines: [], line: null,
+    pen: { color: '#fff', width: 6 }, panel: null, timer: null, motionTimer: null };
+  var boxRGB = function (b, i) { return 'rgb(' + b[i] + ',' + b[i + 1] + ',' + b[i + 2] + ')'; };
+  var boxNotify = function (char, data) {
+    if (!box.connected) return;
+    emit('bluetooth.notification', { id: BOX.id, service: boxId(1), characteristic: boxId(char), value: new DataView(Uint8Array.from(data).buffer) });
+  };
+  var boxEvent = function (type, x, y, arg) {
+    setTimeout(function () { if (box.events) boxNotify(3, [type, x & 255, (x >> 8) & 255, y & 255, (y >> 8) & 255, arg || 0]); }, 15);
+  };
+  var boxCRC = function (b) {
+    var c = -1;
+    for (var i = 0; i < b.length; i++) { c ^= b[i]; for (var k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1)); }
+    return (c ^ -1) >>> 0;
+  };
+  var boxDraw = function () {
+    if (!box.panel) return;
+    var screen = box.panel.querySelector('canvas'), g = screen.getContext('2d');
+    screen.style.opacity = 0.2 + box.light / 125;
+    g.fillStyle = box.bg; g.fillRect(0, 0, box.w, box.h);
+    if (box.image) g.drawImage(box.image, (box.w - box.image.width) / 2, (box.h - box.image.height) / 2);
+    g.lineCap = g.lineJoin = 'round';
+    box.lines.forEach(function (l) {
+      g.strokeStyle = l.color; g.lineWidth = l.width; g.beginPath();
+      l.points.forEach(function (p, i) { if (i) g.lineTo(p[0], p[1]); else { g.moveTo(p[0], p[1]); g.lineTo(p[0], p[1]); } });
+      g.stroke();
+    });
+    if (!box.text || !box.text.value) return;
+    var turned = box.rot % 2, width = (turned ? box.h : box.w) - 20, height = (turned ? box.w : box.h) - 20;
+    var lines, size = box.text.size;
+    for (; size > 10; size -= 2) {
+      g.font = size + 'px system-ui, sans-serif'; lines = [];
+      box.text.value.split('\n').forEach(function (part) {
+        var line = '';
+        part.split(' ').forEach(function (word) {
+          var next = line ? line + ' ' + word : word;
+          if (line && g.measureText(next).width > width) { lines.push(line); line = word; } else line = next;
+        });
+        lines.push(line);
+      });
+      if (lines.length * size * 1.15 <= height && lines.every(function (l) { return g.measureText(l).width <= width; })) break;
+    }
+    g.save(); g.translate(box.w / 2, box.h / 2); g.rotate(box.rot * Math.PI / 2);
+    g.fillStyle = box.text.color; g.textAlign = 'center'; g.textBaseline = 'middle';
+    (lines || []).forEach(function (l, i) { g.fillText(l, 0, (i - (lines.length - 1) / 2) * size * 1.15); });
+    g.restore();
+  };
+  var boxShow = function () {
+    if (box.panel || !document.body) return;
+    var p = box.panel = document.createElement('div');
+    p.id = 'aura-mock-mysterbox';
+    p.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:2147483000;width:140px;padding:6px;border:1px solid #ff2d92;border-radius:14px;background:#111';
+    p.innerHTML = '<canvas width="' + box.w + '" height="' + box.h + '" style="display:block;width:100%;border-radius:9px;touch-action:none"></canvas><div style="display:flex;gap:3px;margin-top:5px"></div>';
+    var screen = p.querySelector('canvas'), start = null;
+    var at = function (e) {
+      var r = screen.getBoundingClientRect();
+      return [Math.max(0, Math.round((e.clientX - r.left) * box.w / r.width)), Math.max(0, Math.round((e.clientY - r.top) * box.h / r.height))];
+    };
+    screen.onpointerdown = function (e) { start = at(e); boxEvent(1, start[0], start[1]); };
+    screen.onpointerup = function (e) {
+      if (!start) return;
+      var q = at(e), dx = q[0] - start[0], dy = q[1] - start[1];
+      boxEvent(2, q[0], q[1]);
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) boxEvent(3, q[0], q[1]);
+      else boxEvent(5, q[0], q[1], Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 3 : 4) : (dy < 0 ? 1 : 2));
+      start = null;
+    };
+    [['BOOT', function () { boxEvent(6, 120, 0, 1); }], ['PWR', function () { boxEvent(6, 120, 0, 2); }],
+      ['Shake', function () { boxEvent(0x21, 0, 0, 25); }], ['Turn', function () { box.face = box.face % 6 + 1; boxEvent(0x20, 0, 0, box.face); }]
+    ].forEach(function (item) {
+      var b = document.createElement('button');
+      b.textContent = item[0]; b.onclick = item[1];
+      b.style.cssText = 'flex:1;min-width:0;padding:4px 0;border:0;border-radius:4px;background:#333;color:#fff;font:9px system-ui';
+      p.lastChild.appendChild(b);
+    });
+    document.body.appendChild(p);
+    boxDraw();
+  };
+  var boxReset = function () {
+    box.connected = box.events = box.imu = false;
+    box.upload = null;
+    clearInterval(box.motionTimer);
+  };
+  var boxCommand = function (b) {
+    var op = b[0], args = b.slice(1), str = function (from) { return new TextDecoder().decode(Uint8Array.from(b.slice(from))); };
+    var u16 = function (i) { return b[i] | (b[i + 1] << 8); };
+    var u32 = function (i) { return (u16(i) | (u16(i + 2) << 16)) >>> 0; };
+    var clear = function () { box.bg = '#000'; box.text = box.image = box.line = null; box.lines = []; };
+    var soundEnd = function (code) { setTimeout(function () { boxEvent(0x23, 0, 0, code); }, 200); };
+    if (op >= 0x20) box.text = { value: str(0), size: box.size, color: box.color };
+    else if (op === 0x01) box.text = { value: str(1), size: box.size, color: box.color };
+    else if (op === 0x11) box.text = { value: str(5), size: b[1], color: boxRGB(b, 2) };
+    else if (op === 0x02) clear();
+    else if (op === 0x03) box.light = b[1];
+    else if (op === 0x04) { clear(); box.bg = boxRGB(b, 1); }
+    else if (op === 0x05) box.size = b[1] || 160;
+    else if (op === 0x06) box.color = boxRGB(b, 1);
+    else if (op === 0x0F) box.rot = b[1];
+    else if (op === 0x0B) box.volume = b[1];
+    else if (op === 0x07 || op === 0x08 || op === 0x0E) soundEnd(0);
+    else if (op === 0x09) soundEnd(box.files[str(1)] ? 0 : 4);
+    else if (op === 0x0D) { clear(); box.text = { value: b[1] ? 'mode ' + b[1] : '', size: 60, color: '#0af' }; }
+    else if (op === 0x1E) box.text = { value: 'card ' + args.join(' / '), size: 60, color: '#0af' };
+    else if (op === 0x12) { box.pen = { color: boxRGB(b, 1), width: b[4] }; box.line = null; }
+    else if (op === 0x13) {
+      if (!box.line) box.lines.push(box.line = { color: box.pen.color, width: box.pen.width, points: [] });
+      for (var i = 1; i + 3 < b.length; i += 4) box.line.points.push([u16(i) << 16 >> 16, u16(i + 2) << 16 >> 16]);
+    } else if (op === 0x14) box.line = null;
+    else if (op === 0x15) { box.lines = []; box.line = null; }
+    else if (op === 0x16) {
+      clearInterval(box.motionTimer);
+      if (b[1]) box.motionTimer = setInterval(function () {
+        if (box.imu) boxNotify(6, [0, 0, 0, 0, 0xE8, 3, 0, 0, 0, 0, 0, 0, box.face]);
+      }, 1000 / Math.min(100, b[1]));
+    } else if (op === 0x17) boxEvent(0x22, 4012, 7, 87);
+    else if (op === 0x18) box.upload = { size: u32(1), name: str(5), data: [] };
+    else if (op === 0x19) {
+      var up = box.upload, code = 0;
+      box.upload = null;
+      if (!up) code = 7;
+      else if (up.data.length !== up.size) code = 2;
+      else if (b.length >= 5 && boxCRC(up.data) !== u32(1)) code = 3;
+      else if (!/^[\w.-]{1,48}$/.test(up.name)) code = 6;
+      else box.files[up.name] = Uint8Array.from(up.data);
+      var got = up ? up.data.length : 0;
+      boxEvent(0x10, got & 65535, Math.floor(got / 65536), code);
+    } else if (op === 0x1A || op === 0x1D) {
+      var file = box.files[str(1)];
+      boxEvent(0x11, 0, 0, file ? 0 : 4);
+      if (file && op === 0x1A && window.createImageBitmap) createImageBitmap(new Blob([file])).then(function (im) { box.image = im; boxDraw(); }, function () {});
+    } else if (op === 0x1B) delete box.files[str(1)];
+    else if (op === 0x1C) box.image = null;
+    if (op !== 0x13) log('MysterBox command', '0x' + op.toString(16), args.slice(0, 24).join(' '));
+    clearTimeout(box.timer);
+    box.timer = setTimeout(boxDraw, 10);
+  };
+  var boxStatus = function () {
+    return 'MysterBox 0.11.1 sd=0 root=/flash/mb imu=1 face=' + box.face + ' bat=87% 4012mV chg usb audio=1 vol=' + box.volume + ' rot=' + box.rot +
+      ' board=' + (boxWatch ? 'amoled206' : 'amoled18') + ' res=' + box.w + 'x' + box.h + ' motor=' + (boxWatch ? 1 : 0) + ' heap=6981k';
+  };
+  var boxBusy = {};             // like the native bridge: one operation at a time per characteristic
+  var boxOp = function (kind, c, run) {
+    if (!box.connected) return fail('Aura: device is not connected.');
+    var key = kind + String(c).toUpperCase();
+    if (boxBusy[key]) return fail('Aura: a Bluetooth operation of this kind is already in progress.');
+    boxBusy[key] = true;
+    return ok().then(function () { delete boxBusy[key]; return run(String(c).toUpperCase()); });
+  };
+  var boxWrite = function (c, data, o) {
+    var b = Array.from(bytes(data)), char = String(c).toUpperCase();
+    if (!box.connected) return fail('Aura: device is not connected.');
+    var handle = function () {
+      if (char === boxId(5)) { if (box.upload) b.forEach(function (x) { box.upload.data.push(x); }); }
+      else if (b.length) boxCommand(b);
+    };
+    if (o && o.withoutResponse) {
+      if (b.length > 182) log('MysterBox: packet dropped, over the MTU (' + b.length + ' bytes)');
+      else handle();
+      return Promise.resolve();
+    }
+    return boxOp('write', char, handle);
+  };
+
   // Simulates iOS killing the app: the peer leaves and the page is replaced by a notice.
   var crash = function () {
     log('peer.join timeout overflow: the app is killed (simulated)');
@@ -519,7 +689,8 @@
       },
       scan: function (o) {
         clearInterval(scanTimer);
-        var found = [DEV, NOVA, PLB].filter(function (d) {
+        var found = [DEV, NOVA, PLB, BOX].filter(function (d) {
+          if (d === BOX) return !o || ((!o.name || o.name === BOX.name) && (!o.namePrefix || BOX.name.indexOf(o.namePrefix) === 0) && !(o.services && o.services.length));
           if (d === PLB) return !(o && o.services && o.services.length) || o.services.map(function (s) { return String(s).toUpperCase(); }).indexOf(NUS) >= 0;
           return d === NOVA ? novaMatches(o) : matches(o);
         });
@@ -530,6 +701,15 @@
       },
       stopScan: function () { clearInterval(scanTimer); return ok(); },
       connect: function (id) {
+        if (id === BOX.id) {
+          box.connected = true;
+          boxShow();
+          log('MysterBox connected: use its panel to touch, press, shake or turn it');
+          return ok({ id: BOX.id, name: BOX.name, services: [{ uuid: boxId(1), characteristics: [
+            { uuid: boxId(2), properties: ['write', 'writeWithoutResponse'] }, { uuid: boxId(3), properties: ['notify'] },
+            { uuid: boxId(4), properties: ['read'] }, { uuid: boxId(5), properties: ['writeWithoutResponse'] },
+            { uuid: boxId(6), properties: ['notify', 'read'] }] }] });
+        }
         if (id === NOVA.id) {
           nova.connected = true;
           return ok({ id: NOVA.id, name: NOVA.name, services: [{ uuid: NOVA_SERVICE, characteristics: [{ uuid: '69400002-B5A3-F393-E0A9-E50E24DCCA99', properties: ['write'] }, { uuid: NOVA_NOTIFY, properties: ['notify'] }] }] });
@@ -544,12 +724,23 @@
         return ok({ id: DEV.id, name: DEV.name, services: [{ uuid: 'FFE0', characteristics: [{ uuid: 'FFE1', properties: ['read', 'write', 'notify'] }] }] });
       },
       disconnect: function (id) {
+        if (id === BOX.id) {
+          var was = box.connected;
+          boxReset();
+          return ok().then(function () { if (was) emit('bluetooth.disconnected', { id: BOX.id }); });
+        }
         if (id === NOVA.id) { nova.connected = false; novaStop(); return ok(); }
         if (id === PLB.id) { plb.connected = plb.notifying = false; return ok(); }
         connected = false; clearInterval(notifyTimer); return ok();
       },
-      read: function () { return connected ? ok(new DataView(bytes(lastWrite).buffer.slice(0))) : fail('Not connected.'); },
-      write: function (id, s, c, data) {
+      read: function (id, s, c) {
+        if (id === BOX.id) return boxOp('read', c, function (char) {
+          return new DataView((char === boxId(4) ? new TextEncoder().encode(boxStatus()) : Uint8Array.from([box.face])).buffer);
+        });
+        return connected ? ok(new DataView(bytes(lastWrite).buffer.slice(0))) : fail('Not connected.');
+      },
+      write: function (id, s, c, data, o) {
+        if (id === BOX.id) return boxWrite(c, data, o);
         if (id === PLB.id) {
           if (!plb.connected) return fail('Not connected.');
           plb.rx += new TextDecoder().decode(bytes(data));
@@ -560,6 +751,7 @@
         }
         if (!connected) return fail('Not connected.'); lastWrite = new TextDecoder().decode(bytes(data)); log('bluetooth write', lastWrite); return ok(); },
       startNotifications: function (id, service, characteristic) {
+        if (id === BOX.id) return boxOp('notify', characteristic, function (char) { box[char === boxId(3) ? 'events' : 'imu'] = true; });
         if (id === NOVA.id) { if (!nova.connected) return fail('Not connected.'); novaStart(); return ok(); }
         if (id === PLB.id) { if (!plb.connected) return fail('Not connected.'); plb.notifying = true; return ok(); }
         if (!connected) return fail('Not connected.');
@@ -570,7 +762,9 @@
         }, 1000);
         return ok();
       },
-      stopNotifications: function (id) { if (id === PLB.id) plb.notifying = false; else if (id === NOVA.id) novaStop(); else clearInterval(notifyTimer); return ok(); },
+      stopNotifications: function (id, service, characteristic) {
+        if (id === BOX.id) return boxOp('notify', characteristic, function (char) { box[char === boxId(3) ? 'events' : 'imu'] = false; });
+        if (id === PLB.id) plb.notifying = false; else if (id === NOVA.id) novaStop(); else clearInterval(notifyTimer); return ok(); },
     },
     peer: {
       host: function (o) {

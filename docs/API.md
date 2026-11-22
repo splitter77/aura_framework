@@ -708,6 +708,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Bluetooth: one device, **Mock Sensor** (`id` `MOCK-BLE-0001`, service `FFE0`, characteristic `FFE1`: read returns the last value written, notifications send a counter every second).
 - Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
 - Bluetooth: a PLB, **MA_Pouce_M0CK01** (`id` `MOCK-PLB-0001`), that answers the PLB text commands: hold **B** to press its button (held one second: long press).
+- Bluetooth: a **MysterBox** (`id` `MOCK-MYSTERBOX-0001`) that speaks the binary protocol and draws its screen in a panel: click = tap, drag = swipe, plus BOOT, PWR, shake and turn buttons. `&mysterbox=watch` simulates the Watch.
 - `deviceInfo()` returns fake identifiers; screen, appearance and locale come from the desktop browser.
 - Flic: `pair()` adds a fake button after 1.5 s. Once reception is armed, keys **1**, **2**, **3** send `single`, `double`, `hold` (any of them sends `down` in `immediate` mode).
 - `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
@@ -716,7 +717,7 @@ The tabs share `localStorage`: a room code saved in one tab is used by the other
 
 ## 19. Device drivers: `devices/`
 
-`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) `devices/aura-nova.js` (**Nova Pen**, below) and `devices/aura-plb.js` (**PLB**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
+`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) `devices/aura-nova.js` (**Nova Pen**, below), `devices/aura-plb.js` (**PLB**, below) and `devices/aura-mysterbox.js` (**MysterBox**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
 
 ```js
 const atom = await AuraAtom.connect({ timeout: 15, lang: 'en' });
@@ -792,6 +793,21 @@ The PLB is named `MA_Pouce_XXXXXX` and speaks text over the Nordic UART Service 
 | `connected`, `pressed`, `level`, `name` | Connection, button held, last light level, PLB name. |
 
 Events: `push`, `release` (`{ duration, long }`), `longpress` (`{ duration }`), `click` (release of a press that was not long), `button` (all, with `{ event }`), `message` (`{ text }`, every answer), `data` (raw text), `discovered`, `status` (`permission`, `scanning`, `connecting`, `connected`, `reconnecting`, `disconnected`), `connect`, `disconnect`. The parser is exposed for tests: `AuraPLB.StreamParser`, `AuraPLB.parseConfig`.
+
+### MysterBox: `devices/aura-mysterbox.js`
+
+`AuraMysterBox` drives the **MysterBox** and the **MysterBox Watch**, the secret displays of MysterSmith. Demo: `examples/mysterbox.html`.
+
+```js
+const box = await AuraMysterBox.connect({ lang: 'en', settings: { brightness: 40, volume: 0 } });
+await box.text('Q♥', { color: '#ff3b30', only: true });
+box.on('tap', () => box.black());
+box.on('button', ({ button }) => console.log(button));   // 'boot' or 'power'
+await box.showPicture(file, { fit: 'cover' });            // resized, uploaded, shown
+if (box.hasMotor) await box.vibrate('double');
+```
+
+It covers the whole protocol: text, live drawing, files, images, sounds, robot and dice screens, vibration, battery and motion. Every method, option and event, with the user guide of the device: **[MYSTERBOX.md](MYSTERBOX.md)**.
 
 ## 20. Wire format
 
