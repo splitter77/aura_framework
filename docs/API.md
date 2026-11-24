@@ -595,7 +595,7 @@ AuraKit.registerDevice()
   .catch((e) => console.warn(e.message));
 ```
 
-Records the phone that opened the page in the App Clip in a `devices_appcliped/` folder on the page's server, one JSON file per phone, updated on every launch. AuraKit only runs in the phone, so the writing is done by a small PHP script: copy [`server/aurakit-devices.php`](../server/aurakit-devices.php) next to your page (any PHP host, Hostinger shared hosting included). It creates `devices_appcliped/` next to itself, with an `.htaccess` that keeps the folder private (Apache, LiteSpeed; on nginx, deny it in the server config).
+Records the phone that opened the page in the App Clip in a `devices_appcliped/` folder on the page's server, one JSON file per phone, updated on every launch. [`server/`](../server/) holds a demo ready to upload, with the files it needs. AuraKit only runs in the phone, so the writing is done by a small PHP script: copy [`server/aurakit-devices.php`](../server/aurakit-devices.php) next to your page (any PHP host, Hostinger shared hosting included). It creates `devices_appcliped/` next to itself, with an `.htaccess` that keeps the folder private (Apache, LiteSpeed; on nginx, deny it in the server config).
 
 The phone's id: Aura gives the App Clip no identifier of its own for the phone (`vendorId` is empty, `userId` is the tag's, the same for every phone that scans it). `AuraKit.deviceId()` makes one: a random UUID created on the first call and kept in the site's `localStorage` (`aurakit.deviceId`). It stays the same across launches until iOS deletes the App Clip's data (after a long time without use, or when the user removes it); the phone then gets a new id. It is per site, and Aura Browser and the App Clip each have their own.
 

@@ -110,6 +110,7 @@ The link, messages, shared state, rooms and iframes work between the two tabs. H
 | [`examples/counter.html`](examples/counter.html) | Shared state |
 | [`examples/chat.html`](examples/chat.html) | Messages, request/answer (round trip), screen flash, reveal, 200 KB message |
 | [`examples/card.html`](examples/card.html) | Performer picks a card, spectator sees it; sync for a guest that connects late |
+| [`server/`](server/) | Record App Clip phones and turn them on or off: demo page, blocked page, PHP scripts, files to upload |
 | [`examples/frames/`](examples/frames/) | AuraKit inside an iframe |
 | [`templates/starter/`](templates/starter/) | Starting point for a one-iPhone page |
 | [`templates/two-iphones/`](templates/two-iphones/) | Starting point for a performer / spectator page, in French and English |
@@ -123,7 +124,7 @@ aurakit-ui.css      iOS-style dark theme (optional)
 aurakit-ui.js       UI helpers and HTML attributes (optional)
 aurakit-i18n.js     Translations (optional)
 devices/            Atom 2, PeekSmith 3, AuraPeek, Nova Pen, PLB and MysterBox drivers (optional)
-server/             aurakit-devices.php (registerDevice, checkDevice) and aurakit-admin.php (optional, PHP)
+server/             aurakit-devices.php (registerDevice, checkDevice), aurakit-admin.php and a demo to upload (optional, PHP)
 examples/           One short HTML file per feature
 templates/          Pages to copy and start from
 docs/API.md         Full reference

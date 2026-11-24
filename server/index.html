@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Démo · appareils App Clip</title>
+
+  <!-- Simulator, only in the AuraKit repository with ?mock=join (not needed on your server). -->
+  <script>/[?&]mock=/.test(location.search) && document.write('<script src="../aurakit-mock.js"><\/script>');</script>
+  <!-- aurakit.js next to this page on your server; ../aurakit.js inside the AuraKit repository. -->
+  <script src="aurakit.js"></script>
+  <script>window.AuraKit || document.write('<script src="../aurakit.js"><\/script>');</script>
+
+  <!-- 1. As early as possible: a phone set to "off" goes to blocked.html and never sees this page. -->
+  <script>
+    window.demo = AuraKit.checkDevice({ redirect: 'blocked.html' }).then(async (check) => {
+      // 2. Allowed: record (or update) this phone in devices_appcliped/.
+      if (check.redirected) return { check };
+      const register = await AuraKit.registerDevice({ extra: { demo: true } }).catch((e) => ({ error: e.message }));
+      return { check, register };
+    });
+  </script>
+
+  <style>
+    :root { color-scheme: dark; }
+    body { font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #000; color: #f2f2f7;
+      margin: 0; padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)); }
+    main { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 26px; margin: 8px 0 4px; } h2 { font-size: 17px; margin: 0 0 10px; }
+    .muted { color: #8e8e93; } .card { background: #1c1c1e; border-radius: 14px; padding: 16px; margin: 16px 0; }
+    dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; } dt { color: #8e8e93; } dd { margin: 0; word-break: break-all; }
+    .pill { display: inline-block; border-radius: 99px; padding: 2px 10px; font-size: 14px; font-weight: 600; background: #2c2c2e; }
+    .pill.on { background: #30d15833; color: #30d158; } .pill.err { background: #ff453a33; color: #ff6961; }
+    pre { margin: 0; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow-x: auto; }
+    .c { color: #8e8e93; } a { color: #0a84ff; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Appareils App Clip</h1>
+  <p class="muted">Démo de <code>AuraKit.checkDevice()</code> et <code>AuraKit.registerDevice()</code>.</p>
+
+  <section class="card">
+    <h2>Ce téléphone</h2>
+    <dl>
+      <dt>Vérification</dt><dd id="check">…</dd>
+      <dt>Enregistrement</dt><dd id="register">…</dd>
+      <dt>Identifiant</dt><dd id="id">…</dd>
+      <dt>Lancements</dt><dd id="launches">—</dd>
+      <dt>Premier lancement</dt><dd id="first">—</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>Pour essayer</h2>
+    <ol>
+      <li>Ouvre cette page avec l’App Clip (tag ou lien Aura) : le téléphone apparaît ci-dessus et dans <code>devices_appcliped/</code>.</li>
+      <li>Sur un ordinateur, ouvre <a href="aurakit-admin.php">aurakit-admin.php</a> et passe ce téléphone en <b>off</b>.</li>
+      <li>Relance l’App Clip : le téléphone arrive sur <code>blocked.html</code>.</li>
+      <li>Repasse-le en <b>on</b> : il revoit cette page.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>Fichiers sur le serveur</h2>
+<pre>ton-site/demo/
+├── index.html            <span class="c">cette page : checkDevice() puis registerDevice()</span>
+├── blocked.html          <span class="c">page des téléphones passés en off</span>
+├── aurakit.js            <span class="c">copié depuis la racine d’AuraKit</span>
+├── aurakit-devices.php   <span class="c">enregistre les téléphones, répond leur statut</span>
+├── aurakit-admin.php     <span class="c">liste on/off (mot de passe dans ADMIN_PASSWORD)</span>
+└── devices_appcliped/    <span class="c">créé tout seul au premier lancement</span>
+    ├── .htaccess         <span class="c">dossier privé</span>
+    ├── index.html
+    └── 3f1c….json        <span class="c">un fichier par téléphone, "status": "on" | "off"</span></pre>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const date = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+  const pill = (text, cls) => `<span class="pill ${cls || ''}">${text}</span>`;
+  const CHECK = {
+    on: pill('on', 'on') + ' autorisé',
+    unknown: pill('nouveau') + ' premier lancement',
+    skipped: pill('ignorée') + ' pas dans l’App Clip',
+    error: pill('erreur', 'err'),
+  };
+
+  $('id').textContent = AuraKit.deviceId();
+  window.demo.then(({ check, register }) => {
+    if (check.redirected) return;
+    $('check').innerHTML = (CHECK[check.status] || check.status) + (check.reason && check.status !== 'skipped' ? ' · ' + check.reason : '');
+    if (!register) return;
+    if (register.error) { $('register').innerHTML = pill('erreur', 'err') + ' ' + register.error; return; }
+    if (!register.registered) { $('register').innerHTML = pill('non') + ' ' + register.reason; return; }
+    $('register').innerHTML = pill(register.isNew ? 'nouveau' : 'mis à jour', 'on') + ' devices_appcliped/' + register.id.slice(0, 8) + '….json';
+    $('launches').textContent = register.launches;
+    $('first').textContent = date(register.firstSeen);
+  });
+</script>
+</body>
+</html>
