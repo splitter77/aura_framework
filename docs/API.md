@@ -659,9 +659,9 @@ The check happens in the phone: it keeps casual users out, not someone who reads
 Instead of editing the files by hand, copy [`server/aurakit-admin.php`](../server/aurakit-admin.php) next to `aurakit-devices.php`, open it on the server and set `ADMIN_PASSWORD` (the page refuses to open while it is empty). Then open `https://your-site/…/aurakit-admin.php` in any browser:
 
 - the list of the phones recorded in `devices_appcliped/`, most recent first: status, model, iOS, id, `extra`, last and first launch, number of launches;
-- **Passer en off / on** on each row;
-- check boxes and **Sélection en off / on** for several phones;
-- **Tout passer en off / on** for every phone (or every phone of the chosen page, when the folder holds phones from several pages).
+- **Set off / Set on** on each row;
+- check boxes and **Selection off / on** for several phones;
+- **All off / All on** for every phone (or every phone of the chosen page, when the folder holds phones from several pages).
 
 The change takes effect at the phone's next launch, through `checkDevice()`. The page needs the password once per browser session, protects its forms against cross-site requests, waits two seconds after a wrong password and is not indexed. Use HTTPS, and pick a long password: anyone who has it can turn phones off.
 

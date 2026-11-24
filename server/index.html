@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Démo · appareils App Clip</title>
+  <title>Demo · App Clip devices</title>
 
   <!-- Simulator, only in the AuraKit repository with ?mock=join (not needed on your server). -->
   <script>/[?&]mock=/.test(location.search) && document.write('<script src="../aurakit-mock.js"><\/script>');</script>
@@ -13,12 +13,18 @@
 
   <!-- 1. As early as possible: a phone set to "off" goes to blocked.html and never sees this page. -->
   <script>
-    window.demo = AuraKit.checkDevice({ redirect: 'blocked.html' }).then(async (check) => {
-      // 2. Allowed: record (or update) this phone in devices_appcliped/.
-      if (check.redirected) return { check };
-      const register = await AuraKit.registerDevice({ extra: { demo: true } }).catch((e) => ({ error: e.message }));
-      return { check, register };
-    });
+    if (!window.AuraKit) {
+      window.demoError = 'aurakit.js not found: copy it next to this page (same folder as index.html).';
+    } else if (typeof AuraKit.checkDevice !== 'function') {
+      window.demoError = 'aurakit.js is an old version (' + AuraKit.version + ', without checkDevice): replace it with the one from the repository, then clear the cache.';
+    } else {
+      window.demo = AuraKit.checkDevice({ redirect: 'blocked.html' }).then(async (check) => {
+        // 2. Allowed: record (or update) this phone in devices_appcliped/.
+        if (check.redirected) return { check };
+        const register = await AuraKit.registerDevice({ extra: { demo: true } }).catch((e) => ({ error: e.message }));
+        return { check, register };
+      });
+    }
   </script>
 
   <style>
@@ -37,67 +43,72 @@
 </head>
 <body>
 <main>
-  <h1>Appareils App Clip</h1>
-  <p class="muted">Démo de <code>AuraKit.checkDevice()</code> et <code>AuraKit.registerDevice()</code>.</p>
+  <h1>App Clip devices</h1>
+  <p class="muted">Demo of <code>AuraKit.checkDevice()</code> and <code>AuraKit.registerDevice()</code>.</p>
 
   <section class="card">
-    <h2>Ce téléphone</h2>
+    <h2>This phone</h2>
     <dl>
-      <dt>Vérification</dt><dd id="check">…</dd>
-      <dt>Enregistrement</dt><dd id="register">…</dd>
-      <dt>Identifiant</dt><dd id="id">…</dd>
-      <dt>Lancements</dt><dd id="launches">—</dd>
-      <dt>Premier lancement</dt><dd id="first">—</dd>
+      <dt>Check</dt><dd id="check">…</dd>
+      <dt>Registration</dt><dd id="register">…</dd>
+      <dt>Id</dt><dd id="id">…</dd>
+      <dt>Launches</dt><dd id="launches">—</dd>
+      <dt>First launch</dt><dd id="first">—</dd>
     </dl>
   </section>
 
   <section class="card">
-    <h2>Pour essayer</h2>
+    <h2>Try it</h2>
     <ol>
-      <li>Ouvre cette page avec l’App Clip (tag ou lien Aura) : le téléphone apparaît ci-dessus et dans <code>devices_appcliped/</code>.</li>
-      <li>Sur un ordinateur, ouvre <a href="aurakit-admin.php">aurakit-admin.php</a> et passe ce téléphone en <b>off</b>.</li>
-      <li>Relance l’App Clip : le téléphone arrive sur <code>blocked.html</code>.</li>
-      <li>Repasse-le en <b>on</b> : il revoit cette page.</li>
+      <li>Open this page with the App Clip (your Aura tag or link): the phone appears above and in <code>devices_appcliped/</code>.</li>
+      <li>On a computer, open <a href="aurakit-admin.php">aurakit-admin.php</a> and set this phone to <b>off</b>.</li>
+      <li>Launch the App Clip again: the phone lands on <code>blocked.html</code>.</li>
+      <li>Set it back to <b>on</b>: it sees this page again.</li>
     </ol>
   </section>
 
   <section class="card">
-    <h2>Fichiers sur le serveur</h2>
-<pre>ton-site/demo/
-├── index.html            <span class="c">cette page : checkDevice() puis registerDevice()</span>
-├── blocked.html          <span class="c">page des téléphones passés en off</span>
-├── aurakit.js            <span class="c">copié depuis la racine d’AuraKit</span>
-├── aurakit-devices.php   <span class="c">enregistre les téléphones, répond leur statut</span>
-├── aurakit-admin.php     <span class="c">liste on/off (mot de passe dans ADMIN_PASSWORD)</span>
-└── devices_appcliped/    <span class="c">créé tout seul au premier lancement</span>
-    ├── .htaccess         <span class="c">dossier privé</span>
+    <h2>Files on the server</h2>
+<pre>your-site/demo/
+├── index.html            <span class="c">this page: checkDevice(), then registerDevice()</span>
+├── blocked.html          <span class="c">page for phones set to off</span>
+├── aurakit.js            <span class="c">copied from the root of AuraKit</span>
+├── aurakit-devices.php   <span class="c">records the phones, answers their status</span>
+├── aurakit-admin.php     <span class="c">on/off list (password in ADMIN_PASSWORD)</span>
+└── devices_appcliped/    <span class="c">created by itself on the first launch</span>
+    ├── .htaccess         <span class="c">keeps the folder private</span>
     ├── index.html
-    └── 3f1c….json        <span class="c">un fichier par téléphone, "status": "on" | "off"</span></pre>
+    └── 3f1c….json        <span class="c">one file per phone, "status": "on" | "off"</span></pre>
   </section>
 </main>
 
 <script>
   const $ = (id) => document.getElementById(id);
-  const date = (iso) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+  const date = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—');
   const pill = (text, cls) => `<span class="pill ${cls || ''}">${text}</span>`;
   const CHECK = {
-    on: pill('on', 'on') + ' autorisé',
-    unknown: pill('nouveau') + ' premier lancement',
-    skipped: pill('ignorée') + ' pas dans l’App Clip',
-    error: pill('erreur', 'err'),
+    on: pill('on', 'on') + ' allowed',
+    unknown: pill('new') + ' first launch',
+    skipped: pill('skipped') + ' not in the App Clip',
+    error: pill('error', 'err'),
   };
 
+  if (window.demoError) {
+    $('check').innerHTML = pill('error', 'err') + ' ' + window.demoError;
+    ['register', 'id'].forEach((id) => { $(id).textContent = '—'; });
+  } else {
   $('id').textContent = AuraKit.deviceId();
   window.demo.then(({ check, register }) => {
     if (check.redirected) return;
     $('check').innerHTML = (CHECK[check.status] || check.status) + (check.reason && check.status !== 'skipped' ? ' · ' + check.reason : '');
     if (!register) return;
-    if (register.error) { $('register').innerHTML = pill('erreur', 'err') + ' ' + register.error; return; }
-    if (!register.registered) { $('register').innerHTML = pill('non') + ' ' + register.reason; return; }
-    $('register').innerHTML = pill(register.isNew ? 'nouveau' : 'mis à jour', 'on') + ' devices_appcliped/' + register.id.slice(0, 8) + '….json';
+    if (register.error) { $('register').innerHTML = pill('error', 'err') + ' ' + register.error; return; }
+    if (!register.registered) { $('register').innerHTML = pill('no') + ' ' + register.reason; return; }
+    $('register').innerHTML = pill(register.isNew ? 'new' : 'updated', 'on') + ' devices_appcliped/' + register.id.slice(0, 8) + '….json';
     $('launches').textContent = register.launches;
     $('first').textContent = date(register.firstSeen);
-  });
+  }).catch((e) => { $('check').innerHTML = pill('error', 'err') + ' ' + e.message; });
+  }
 </script>
 </body>
 </html>

@@ -81,7 +81,7 @@ function fmt_date($iso): string {
 }
 
 function page_start(string $title): void {
-    echo '<!doctype html><html lang="fr"><head><meta charset="utf-8">'
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         . '<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">'
         . '<title>' . h($title) . '</title><style>
         :root { color-scheme: dark; }
@@ -106,9 +106,9 @@ function page_start(string $title): void {
 
 // ------------------------------------------------------------------ Not configured
 if (ADMIN_PASSWORD === '') {
-    page_start('AuraKit · appareils');
-    echo '<div class="card"><h1>Page non configurée</h1><p>Ouvre <code>' . h(basename(__FILE__))
-        . '</code> sur le serveur et choisis un mot de passe dans <code>ADMIN_PASSWORD</code>.</p></div></body></html>';
+    page_start('AuraKit · devices');
+    echo '<div class="card"><h1>Page not set up</h1><p>Open <code>' . h(basename(__FILE__))
+        . '</code> on the server and choose a password in <code>ADMIN_PASSWORD</code>.</p></div></body></html>';
     exit;
 }
 
@@ -125,7 +125,7 @@ if ($method === 'POST' && ($_POST['action'] ?? '') === 'login') {
         exit;
     }
     sleep(2);                              // slows down password guessing
-    $_SESSION['flash'] = ['err', 'Mot de passe incorrect.'];
+    $_SESSION['flash'] = ['err', 'Wrong password.'];
     header('Location: ' . self_url());
     exit;
 }
@@ -140,13 +140,13 @@ $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 
 if (empty($_SESSION['admin'])) {
-    page_start('AuraKit · connexion');
-    echo '<div class="card" style="max-width:360px;margin:60px auto"><h1>Appareils App Clip</h1>';
+    page_start('AuraKit · sign in');
+    echo '<div class="card" style="max-width:360px;margin:60px auto"><h1>App Clip devices</h1>';
     if ($flash) echo '<p class="msg ' . h($flash[0]) . '">' . h($flash[1]) . '</p>';
     echo '<form method="post" class="bar" style="margin-top:12px"><input type="hidden" name="action" value="login">'
         . '<input type="hidden" name="csrf" value="' . h($_SESSION['csrf']) . '">'
-        . '<input type="password" name="password" placeholder="Mot de passe" autofocus required style="flex:1">'
-        . '<button class="on">Entrer</button></form></div></body></html>';
+        . '<input type="password" name="password" placeholder="Password" autofocus required style="flex:1">'
+        . '<button class="on">Sign in</button></form></div></body></html>';
     exit;
 }
 
@@ -156,7 +156,7 @@ $pageFilter = is_string($_GET['page'] ?? null) ? $_GET['page'] : '';
 if ($method === 'POST') {
     $back = self_url($pageFilter !== '' ? ['page' => $pageFilter] : []);
     if (!$csrfOk) {
-        $_SESSION['flash'] = ['err', 'Session expirée, recommence.'];
+        $_SESSION['flash'] = ['err', 'Session expired, please try again.'];
         header('Location: ' . $back);
         exit;
     }
@@ -176,9 +176,9 @@ if ($method === 'POST') {
     $done = 0;
     foreach ($ids as $id) if (set_status($id, $status)) $done++;
     $_SESSION['flash'] = $ids
-        ? ['msg', $done . ' appareil' . ($done > 1 ? 's' : '') . ' passé' . ($done > 1 ? 's' : '') . ' en ' . $status . '.'
-            . ($done < count($ids) ? ' ' . (count($ids) - $done) . ' n’ont pas pu être modifiés (droits du dossier ?).' : '')]
-        : ['err', 'Aucun appareil sélectionné.'];
+        ? ['msg', $done . ' device' . ($done === 1 ? '' : 's') . ' set to ' . $status . '.'
+            . ($done < count($ids) ? ' ' . (count($ids) - $done) . ' could not be changed (folder permissions?).' : '')]
+        : ['err', 'No device selected.'];
     header('Location: ' . $back);
     exit;
 }
@@ -191,40 +191,40 @@ $devices = $pageFilter === '' ? $all : array_values(array_filter($all, fn($d) =>
 $countOff = count(array_filter($devices, fn($d) => $d['status'] === 'off'));
 $csrf = h($_SESSION['csrf']);
 
-page_start('AuraKit · appareils');
-echo '<div class="bar" style="justify-content:space-between"><div><h1>Appareils App Clip</h1><div class="muted">'
-    . count($devices) . ' appareil' . (count($devices) > 1 ? 's' : '') . ' · ' . (count($devices) - $countOff) . ' on · ' . $countOff . ' off</div></div>'
+page_start('AuraKit · devices');
+echo '<div class="bar" style="justify-content:space-between"><div><h1>App Clip devices</h1><div class="muted">'
+    . count($devices) . ' device' . (count($devices) === 1 ? '' : 's') . ' · ' . (count($devices) - $countOff) . ' on · ' . $countOff . ' off</div></div>'
     . '<form method="post"><input type="hidden" name="action" value="logout"><input type="hidden" name="csrf" value="' . $csrf . '">'
-    . '<button>Déconnexion</button></form></div>';
+    . '<button>Sign out</button></form></div>';
 if ($flash) echo '<p class="msg ' . h($flash[0]) . '">' . h($flash[1]) . '</p>';
 
 if (count($pages) > 1) {
     echo '<form method="get" class="bar card"><label class="muted" for="page">Page</label><select id="page" name="page" onchange="this.form.submit()">'
-        . '<option value="">Toutes les pages</option>';
+        . '<option value="">All pages</option>';
     foreach ($pages as $p) echo '<option value="' . h($p) . '"' . ($p === $pageFilter ? ' selected' : '') . '>' . h($p) . '</option>';
-    echo '</select><noscript><button>Filtrer</button></noscript></form>';
+    echo '</select><noscript><button>Filter</button></noscript></form>';
 }
 
 if (!$devices) {
-    echo '<div class="card muted">Aucun appareil enregistré' . ($pageFilter !== '' ? ' pour cette page' : '')
-        . '. Les téléphones apparaissent ici après un lancement de l’App Clip sur une page qui appelle <code>AuraKit.registerDevice()</code>.</div></body></html>';
+    echo '<div class="card muted">No device recorded' . ($pageFilter !== '' ? ' for this page' : '')
+        . '. Phones appear here after a launch of the App Clip on a page that calls <code>AuraKit.registerDevice()</code>.</div></body></html>';
     exit;
 }
 
-$scope = $pageFilter === '' ? 'tous les appareils' : 'tous les appareils de cette page';
+$scope = $pageFilter === '' ? 'every device' : 'every device of this page';
 echo '<div class="card"><div class="bar">'
-    . '<form method="post" onsubmit="return confirm(\'Passer ' . h($scope) . ' en off ?\')"><input type="hidden" name="action" value="all">'
-    . '<input type="hidden" name="status" value="off"><input type="hidden" name="csrf" value="' . $csrf . '"><button class="off">Tout passer en off</button></form>'
-    . '<form method="post" onsubmit="return confirm(\'Passer ' . h($scope) . ' en on ?\')"><input type="hidden" name="action" value="all">'
-    . '<input type="hidden" name="status" value="on"><input type="hidden" name="csrf" value="' . $csrf . '"><button class="on">Tout passer en on</button></form>'
+    . '<form method="post" onsubmit="return confirm(\'Set ' . h($scope) . ' to off?\')"><input type="hidden" name="action" value="all">'
+    . '<input type="hidden" name="status" value="off"><input type="hidden" name="csrf" value="' . $csrf . '"><button class="off">All off</button></form>'
+    . '<form method="post" onsubmit="return confirm(\'Set ' . h($scope) . ' to on?\')"><input type="hidden" name="action" value="all">'
+    . '<input type="hidden" name="status" value="on"><input type="hidden" name="csrf" value="' . $csrf . '"><button class="on">All on</button></form>'
     . '<span class="muted" style="margin-left:auto" id="selCount"></span>'
-    . '<button class="off" form="sel" name="status" value="off" data-sel disabled>Sélection en off</button>'
-    . '<button class="on" form="sel" name="status" value="on" data-sel disabled>Sélection en on</button>'
+    . '<button class="off" form="sel" name="status" value="off" data-sel disabled>Selection off</button>'
+    . '<button class="on" form="sel" name="status" value="on" data-sel disabled>Selection on</button>'
     . '</div></div>';
 
 echo '<form method="post" id="sel"><input type="hidden" name="action" value="selected"><input type="hidden" name="csrf" value="' . $csrf . '"></form>';
-echo '<div class="card" style="padding:4px 8px"><table><thead><tr><th><input type="checkbox" id="checkAll" aria-label="Tout sélectionner"></th>'
-    . '<th>Statut</th><th>Appareil</th><th>Dernier lancement</th><th class="wide">Lancements</th><th class="wide">Premier lancement</th>'
+echo '<div class="card" style="padding:4px 8px"><table><thead><tr><th><input type="checkbox" id="checkAll" aria-label="Select all"></th>'
+    . '<th>Status</th><th>Device</th><th>Last launch</th><th class="wide">Launches</th><th class="wide">First launch</th>'
     . ($pageFilter === '' && count($pages) > 1 ? '<th class="wide">Page</th>' : '') . '<th></th></tr></thead><tbody>';
 foreach ($devices as $d) {
     $off = $d['status'] === 'off';
@@ -232,7 +232,7 @@ foreach ($devices as $d) {
     $system = trim(($d['system_name'] ?? '') . ' ' . ($d['system_version'] ?? ''));
     $extra = isset($d['extra']) && $d['extra'] !== null ? json_encode($d['extra'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '';
     echo '<tr class="' . ($off ? 'off' : 'on') . '">'
-        . '<td><input type="checkbox" name="ids[]" value="' . h($d['id']) . '" form="sel" aria-label="Sélectionner"></td>'
+        . '<td><input type="checkbox" name="ids[]" value="' . h($d['id']) . '" form="sel" aria-label="Select"></td>'
         . '<td><span class="pill ' . ($off ? 'off' : 'on') . '">' . ($off ? 'off' : 'on') . '</span></td>'
         . '<td>' . h($model ?: 'iPhone') . ($system !== '' ? ' <span class="muted">· ' . h($system) . '</span>' : '')
         . '<br><code>' . h($d['id']) . '</code>' . ($extra !== '' ? '<br><code>' . h($extra) . '</code>' : '') . '</td>'
@@ -242,7 +242,7 @@ foreach ($devices as $d) {
         . ($pageFilter === '' && count($pages) > 1 ? '<td class="wide"><code>' . h($d['page'] ?? '') . '</code></td>' : '')
         . '<td><form method="post"><input type="hidden" name="action" value="one"><input type="hidden" name="csrf" value="' . $csrf . '">'
         . '<input type="hidden" name="id" value="' . h($d['id']) . '"><input type="hidden" name="status" value="' . ($off ? 'on' : 'off') . '">'
-        . '<button class="' . ($off ? 'on' : 'off') . '">Passer en ' . ($off ? 'on' : 'off') . '</button></form></td></tr>';
+        . '<button class="' . ($off ? 'on' : 'off') . '">Set ' . ($off ? 'on' : 'off') . '</button></form></td></tr>';
 }
 echo '</tbody></table></div>';
 ?>
@@ -252,7 +252,7 @@ echo '</tbody></table></div>';
   const update = () => {
     const n = boxes.filter((b) => b.checked).length;
     document.querySelectorAll('[data-sel]').forEach((b) => { b.disabled = !n; });
-    document.getElementById('selCount').textContent = n ? n + ' sélectionné' + (n > 1 ? 's' : '') : '';
+    document.getElementById('selCount').textContent = n ? n + ' selected' : '';
     all.checked = n && n === boxes.length; all.indeterminate = n > 0 && n < boxes.length;
   };
   all.addEventListener('change', () => { boxes.forEach((b) => { b.checked = all.checked; }); update(); });
