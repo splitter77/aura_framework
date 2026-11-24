@@ -23,6 +23,8 @@ your-site/demo/
 
 ## Trying it
 
+The full step-by-step test, with what you should see at each step and a troubleshooting table: **[TESTING.md](TESTING.md)**. In short:
+
 1. Open `aurakit-admin.php` on the server and set `ADMIN_PASSWORD`.
 2. Open `index.html` with the App Clip (your Aura tag or link): the page shows the phone's id and number of launches, and the phone appears in `devices_appcliped/`.
 3. On a computer, open `aurakit-admin.php`, sign in and set the phone to **off**.
