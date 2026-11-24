@@ -14,7 +14,8 @@
  * Bluetooth LE: "Mock Sensor", with a counter notifying every second (service FFE0, characteristic FFE1),
  * "60BP-MOCK", a Nova pen that writes a random number on a new sheet every few seconds (devices/aura-nova.js),
  * "MA_Pouce_M0CK01", a PLB thumb button (devices/aura-plb.js): hold B to press its button,
- * and "MysterBox" (devices/aura-mysterbox.js), with its screen and buttons in a panel (&mysterbox=watch for the Watch). */
+ * "MysterBox" (devices/aura-mysterbox.js), with its screen and buttons in a panel (&mysterbox=watch for the Watch),
+ * and "Lumen-ZY-Duo" (devices/aura-lumenduo.js), with its 160 × 80 display and L / R buttons in a panel. */
 (function () {
   'use strict';
   if (window.Aura) return;
@@ -443,6 +444,80 @@
     return boxOp('write', char, handle);
   };
 
+  // A Lumen Duo (devices/aura-lumenduo.js): 160 × 80 one-bit display drawn in a panel, buttons L / R,
+  // battery status every 10 s. Speaks the binary commands and text notifications read from the SDK.
+  var LUM = { id: 'MOCK-LUMENDUO-0001', name: 'Lumen-ZY-Duo', rssi: -47 };
+  var LUM_SERVICE = '6E40FF01-B5A3-F393-E0A9-E50E24DCCA9E', LUM_WRITE = '6E40FF02-B5A3-F393-E0A9-E50E24DCCA9E',
+    LUM_NOTIFY = '6E40FF03-B5A3-F393-E0A9-E50E24DCCA9E';
+  var lum = { connected: false, notifying: false, w: 160, h: 80, pages: {}, colors: {}, shown: 0, light: 90, bar: false,
+    charging: false, volts: 4.12, panel: null, timer: null, statusTimer: null, clearArmed: false };
+  var lumPage = function (p) { return lum.pages[p] || (lum.pages[p] = new Uint8Array(lum.w / 8 * lum.h)); };
+  var lumRGB = function (c) {    // RGB565 → [r, g, b]
+    return [Math.round((c >> 11) * 255 / 31), Math.round(((c >> 5) & 63) * 255 / 63), Math.round((c & 31) * 255 / 31)];
+  };
+  var lumNotify = function (text) {
+    if (!lum.notifying) return;
+    emit('bluetooth.notification', { id: LUM.id, service: LUM_SERVICE, characteristic: LUM_NOTIFY, value: new DataView(new TextEncoder().encode(text).buffer) });
+  };
+  var lumStatus = function () {   // 11 characters: state, 000, P + digit, V + volts × 100, 0
+    lumNotify((lum.charging ? '1' : '0') + '000P5V' + Math.round(lum.volts * 100) + '0');
+  };
+  var lumDraw = function () {
+    if (!lum.panel) return;
+    var screen = lum.panel.querySelector('canvas'), g = screen.getContext('2d');
+    var bits = lumPage(lum.shown), c = lum.colors[lum.shown] || { bg: [0, 0, 0], fg: [255, 255, 255] }, img = g.createImageData(lum.w, lum.h);
+    var bg = c.bg, fg = c.fg;
+    for (var y = 0; y < lum.h; y++) for (var x = 0; x < lum.w; x++) {
+      var on = bits[y * lum.w / 8 + (x >> 3)] & (1 << (x & 7)), col = on ? fg : bg, i = (y * lum.w + x) * 4;
+      img.data[i] = col[0]; img.data[i + 1] = col[1]; img.data[i + 2] = col[2]; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    if (lum.bar) {
+      g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(0, 0, lum.w, 11);
+      g.fillStyle = '#aaa'; g.font = '9px system-ui'; g.textBaseline = 'top';
+      g.fillText(new Date().toTimeString().slice(0, 5), 3, 1);
+      g.fillText(Math.round(Math.max(0, Math.min(1, (lum.volts - 3.5) / 0.65)) * 100) + '%', lum.w - 26, 1);
+    }
+    screen.style.opacity = 0.25 + lum.light / 133;
+  };
+  var lumShow = function () {
+    if (lum.panel || !document.body) return;
+    var p = lum.panel = document.createElement('div');
+    p.id = 'aura-mock-lumenduo';
+    p.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483000;width:252px;padding:6px;border:1px solid #ff2d92;border-radius:14px;background:#111;font:10px system-ui;color:#888';
+    p.innerHTML = '<div style="margin:0 2px 4px">Lumen Duo (mock)</div><canvas width="' + lum.w + '" height="' + lum.h + '" style="display:block;width:100%;image-rendering:pixelated;border-radius:6px;background:#000"></canvas><div style="display:flex;gap:3px;margin-top:5px"></div>';
+    [['L', '0K0'], ['L×2', '1K0'], ['R', '0K1'], ['R×2', '1K1'], ['R long', '2K1'],
+      ['Charge', function (b) { lum.charging = !lum.charging; b.style.background = lum.charging ? '#0a84ff' : '#333'; lumStatus(); }]
+    ].forEach(function (item) {
+      var b = document.createElement('button');
+      b.textContent = item[0];
+      b.onclick = typeof item[1] === 'function' ? function () { item[1](b); } : function () { log('Lumen Duo button', item[1]); lumNotify(item[1]); };
+      b.style.cssText = 'flex:1;min-width:0;padding:4px 0;border:0;border-radius:4px;background:#333;color:#fff;font:9px system-ui';
+      p.lastChild.appendChild(b);
+    });
+    document.body.appendChild(p);
+    lumDraw();
+  };
+  var lumReset = function () { lum.connected = lum.notifying = false; clearInterval(lum.statusTimer); };
+  var lumCommand = function (b) {
+    var op = b[0], page = b[1] || 0;
+    if (op === 0xAE) {
+      var rows = lumPage(page), at = b[3] * lum.w / 8;
+      for (var i = 4; i < b.length && at + i - 4 < rows.length; i++) rows[at + i - 4] = b[i];
+    } else if (op === 0xE0) lum.shown = page;
+    else if (op === 0xF2) lum.colors[page] = { bg: lumRGB((b[2] << 8) | b[3]), fg: lumRGB((b[4] << 8) | b[5]) };
+    else if (op === 0x5A && b[1] === 0xA5) lum.clearArmed = true;
+    else if (op === 0xAA && lum.clearArmed) { lum.clearArmed = false; lum.pages = {}; }
+    else if (op === 0xBB) lum.light = b[1];
+    else if (op === 0xE3) {
+      if (lum.panel && lum.panel.animate) lum.panel.animate([{ transform: 'translateX(-3px)' }, { transform: 'translateX(3px)' }, { transform: 'none' }], { duration: 60 + b[1] * 2, iterations: 2 });
+    } else if (op === 0xFB) lum.bar = !lum.bar;
+    else if (op === 0xFF) setTimeout(function () { lumNotify('ZY_DUO096-V1.0.3'); }, 40);
+    if (op !== 0xAE) log('Lumen Duo command', '0x' + op.toString(16), Array.from(b.slice(1, 8)).join(' '));
+    clearTimeout(lum.timer);
+    lum.timer = setTimeout(lumDraw, 10);
+  };
+
   // Simulates iOS killing the app: the peer leaves and the page is replaced by a notice.
   var crash = function () {
     log('peer.join timeout overflow: the app is killed (simulated)');
@@ -689,7 +764,8 @@
       },
       scan: function (o) {
         clearInterval(scanTimer);
-        var found = [DEV, NOVA, PLB, BOX].filter(function (d) {
+        var found = [DEV, NOVA, PLB, BOX, LUM].filter(function (d) {
+          if (d === LUM) return !o || ((!o.name || o.name === LUM.name) && (!o.namePrefix || LUM.name.indexOf(o.namePrefix) === 0) && !(o.services && o.services.length));
           if (d === BOX) return !o || ((!o.name || o.name === BOX.name) && (!o.namePrefix || BOX.name.indexOf(o.namePrefix) === 0) && !(o.services && o.services.length));
           if (d === PLB) return !(o && o.services && o.services.length) || o.services.map(function (s) { return String(s).toUpperCase(); }).indexOf(NUS) >= 0;
           return d === NOVA ? novaMatches(o) : matches(o);
@@ -701,6 +777,16 @@
       },
       stopScan: function () { clearInterval(scanTimer); return ok(); },
       connect: function (id) {
+        if (id === LUM.id) {
+          lum.connected = true;
+          lum.bar = true;           // assumed: shown after power-up, so the SDK's toggle at connection hides it
+          lumShow();
+          clearInterval(lum.statusTimer);
+          lum.statusTimer = setInterval(function () { lum.volts = Math.max(3.6, lum.volts - (lum.charging ? -0.01 : 0.005)); lumStatus(); }, 10000);
+          log('Lumen Duo connected: use its panel to press L / R');
+          return ok({ id: LUM.id, name: LUM.name, services: [{ uuid: LUM_SERVICE, characteristics: [
+            { uuid: LUM_WRITE, properties: ['write', 'writeWithoutResponse'] }, { uuid: LUM_NOTIFY, properties: ['notify'] }] }] });
+        }
         if (id === BOX.id) {
           box.connected = true;
           boxShow();
@@ -724,6 +810,11 @@
         return ok({ id: DEV.id, name: DEV.name, services: [{ uuid: 'FFE0', characteristics: [{ uuid: 'FFE1', properties: ['read', 'write', 'notify'] }] }] });
       },
       disconnect: function (id) {
+        if (id === LUM.id) {
+          var wasLum = lum.connected;
+          lumReset();
+          return ok().then(function () { if (wasLum) emit('bluetooth.disconnected', { id: LUM.id }); });
+        }
         if (id === BOX.id) {
           var was = box.connected;
           boxReset();
@@ -741,6 +832,12 @@
       },
       write: function (id, s, c, data, o) {
         if (id === BOX.id) return boxWrite(c, data, o);
+        if (id === LUM.id) {
+          if (!lum.connected) return fail('Aura: device is not connected.');
+          var lb = bytes(data);
+          if (String(c).toUpperCase() === LUM_WRITE && lb.length) lumCommand(lb);
+          return o && o.withoutResponse ? Promise.resolve() : ok();
+        }
         if (id === PLB.id) {
           if (!plb.connected) return fail('Not connected.');
           plb.rx += new TextDecoder().decode(bytes(data));
@@ -752,6 +849,12 @@
         if (!connected) return fail('Not connected.'); lastWrite = new TextDecoder().decode(bytes(data)); log('bluetooth write', lastWrite); return ok(); },
       startNotifications: function (id, service, characteristic) {
         if (id === BOX.id) return boxOp('notify', characteristic, function (char) { box[char === boxId(3) ? 'events' : 'imu'] = true; });
+        if (id === LUM.id) {
+          if (!lum.connected) return fail('Aura: device is not connected.');
+          lum.notifying = true;
+          setTimeout(lumStatus, 300);
+          return ok();
+        }
         if (id === NOVA.id) { if (!nova.connected) return fail('Not connected.'); novaStart(); return ok(); }
         if (id === PLB.id) { if (!plb.connected) return fail('Not connected.'); plb.notifying = true; return ok(); }
         if (!connected) return fail('Not connected.');
@@ -764,7 +867,7 @@
       },
       stopNotifications: function (id, service, characteristic) {
         if (id === BOX.id) return boxOp('notify', characteristic, function (char) { box[char === boxId(3) ? 'events' : 'imu'] = false; });
-        if (id === PLB.id) plb.notifying = false; else if (id === NOVA.id) novaStop(); else clearInterval(notifyTimer); return ok(); },
+        if (id === LUM.id) lum.notifying = false; else if (id === PLB.id) plb.notifying = false; else if (id === NOVA.id) novaStop(); else clearInterval(notifyTimer); return ok(); },
     },
     peer: {
       host: function (o) {

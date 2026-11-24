@@ -787,6 +787,7 @@ A fake `window.Aura` for desktop browsers. Load it **before** `aurakit.js`. It d
 - Bluetooth: a Nova pen, **60BP-MOCK** (`id` `MOCK-NOVA-0001`), found by an unfiltered scan: once connected it writes a random number on a new sheet every few seconds, with real binary frames split across notifications.
 - Bluetooth: a PLB, **MA_Pouce_M0CK01** (`id` `MOCK-PLB-0001`), that answers the PLB text commands: hold **B** to press its button (held one second: long press).
 - Bluetooth: a **MysterBox** (`id` `MOCK-MYSTERBOX-0001`) that speaks the binary protocol and draws its screen in a panel: click = tap, drag = swipe, plus BOOT, PWR, shake and turn buttons. `&mysterbox=watch` simulates the Watch.
+- Bluetooth: a Lumen Duo, **Lumen-ZY-Duo** (`id` `MOCK-LUMENDUO-0001`), that speaks the protocol read from its SDK and shows its 160 × 80 display in a panel, with **L** / **R** button presses (single, double, long), a charging toggle and a battery status every 10 seconds.
 - `deviceInfo()` returns fake identifiers; screen, appearance and locale come from the desktop browser.
 - Flic: `pair()` adds a fake button after 1.5 s. Once reception is armed, keys **1**, **2**, **3** send `single`, `double`, `hold` (any of them sends `down` in `immediate` mode).
 - `quitAppClip()` (any `peer.join` whose timeout overflows) replaces the page with a “closed” notice, as if iOS had killed the app.
@@ -795,7 +796,7 @@ The tabs share `localStorage`: a room code saved in one tab is used by the other
 
 ## 19. Device drivers: `devices/`
 
-`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) `devices/aura-nova.js` (**Nova Pen**, below), `devices/aura-plb.js` (**PLB**, below) and `devices/aura-mysterbox.js` (**MysterBox**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
+`devices/aura-atom.js` (Electricks **Atom 2**), `devices/aura-peeksmith.js` (Electricks **PeekSmith 3**) `devices/aura-nova.js` (**Nova Pen**, below), `devices/aura-plb.js` (**PLB**, below), `devices/aura-mysterbox.js` (**MysterBox**, below) and `devices/aura-lumenduo.js` (**Lumen Duo**, below) drive these devices over `window.Aura.bluetooth`. They run in the main frame.
 
 ```js
 const atom = await AuraAtom.connect({ timeout: 15, lang: 'en' });
@@ -886,6 +887,22 @@ if (box.hasMotor) await box.vibrate('double');
 ```
 
 It covers the whole protocol: text, live drawing, files, images, sounds, robot and dice screens, vibration, battery and motion. Every method, option and event, with the user guide of the device: **[MYSTERBOX.md](MYSTERBOX.md)**.
+
+### Lumen Duo: `devices/aura-lumenduo.js`
+
+`AuraLumenDuo` drives the **Lumen Duo** (Lumen S Eye), a 160 × 80 one-bit display clipped on glasses, with two buttons and a vibration motor. Demo: `examples/lumenduo.html`.
+
+```js
+const duo = await AuraLumenDuo.connect({ lang: 'en', brightness: 80 });
+await duo.text('Q♥', { color: '#ff3b30', background: '#000' });   // drawn by the page, sent as a picture
+await duo.image(file, { dither: true });                          // fitted into 160 × 80, one bit per pixel
+duo.on('click', ({ button }) => console.log(button));              // 'left' | 'right'
+duo.on('doubleclick', ({ button }) => console.log('double', button));
+duo.on('battery', ({ volts, charging }) => console.log(volts, charging));
+await duo.vibrate(0.5);
+```
+
+The protocol was read from the manufacturer's closed iOS framework (no source, no document): commands written without response to `6E40FF02-B5A3-F393-E0A9-E50E24DCCA9E`, text notifications on `6E40FF03-…` for the buttons (`0K0` … `2K1`), the battery and the firmware version. It was not tested with real glasses. Methods, events, the byte-level protocol and the list of what still needs checking on the device: **[LUMENDUO.md](LUMENDUO.md)**.
 
 ## 20. Wire format
 

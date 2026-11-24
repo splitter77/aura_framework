@@ -30,7 +30,7 @@ Optional add-ons:
 | `aurakit-ui.css` + `aurakit-ui.js` | iOS-style dark theme, connection pill, link log, room code form, toast, screen flash, full-screen reveal, all usable with plain HTML attributes. |
 | `aurakit-i18n.js` | Translate a page with HTML attributes (`data-en="…"`), language switch, `t('Bonjour', 'Hello')` in JavaScript. |
 | `aurakit-mock.js` | Desktop simulator of `window.Aura`: test two iPhones with two browser tabs. |
-| `devices/` | Ready-made drivers for the Electricks **Atom 2** and **PeekSmith 3**, the AuraPeek, the **Nova Pen**, the **PLB** thumb button and the **MysterBox** / MysterBox Watch. |
+| `devices/` | Ready-made drivers for the Electricks **Atom 2** and **PeekSmith 3**, the AuraPeek, the **Nova Pen**, the **PLB** thumb button, the **MysterBox** / MysterBox Watch and the **Lumen Duo** glasses display. |
 
 ## Quick start
 
@@ -91,7 +91,7 @@ Then open two tabs of the same browser:
 - `http://localhost:8770/examples/?mock=host` behaves like Aura Browser (host)
 - `http://localhost:8770/examples/?mock=join` behaves like the App Clip (guest)
 
-The link, messages, shared state, rooms and iframes work between the two tabs. Haptics are logged to the console. Press **P** to cover the proximity sensor, **+** and **-** for the volume buttons. Bluetooth shows four fake devices: **Mock Sensor**, that sends a counter every second; **60BP-MOCK**, a Nova pen that writes a random number every few seconds; **MA_Pouce_M0CK01**, a PLB whose button you press by holding **B**; and **MysterBox**, with its screen and buttons in a panel (add `&mysterbox=watch` for the Watch).
+The link, messages, shared state, rooms and iframes work between the two tabs. Haptics are logged to the console. Press **P** to cover the proximity sensor, **+** and **-** for the volume buttons. Bluetooth shows five fake devices: **Mock Sensor**, that sends a counter every second; **60BP-MOCK**, a Nova pen that writes a random number every few seconds; **MA_Pouce_M0CK01**, a PLB whose button you press by holding **B**; **MysterBox**, with its screen and buttons in a panel (add `&mysterbox=watch` for the Watch); and **Lumen-ZY-Duo**, a Lumen Duo with its display and L / R buttons in a panel.
 
 ## Examples and templates
 
@@ -107,6 +107,7 @@ The link, messages, shared state, rooms and iframes work between the two tabs. H
 | [`examples/aura_nova.html`](examples/aura_nova.html) | Nova Pen: live handwriting, SVG and OCR image export |
 | [`examples/plb.html`](examples/plb.html) | PLB thumb button: button events, light, battery, auto-off |
 | [`examples/mysterbox.html`](examples/mysterbox.html) | MysterBox and Watch: text, live drawing, pictures, robot, sounds, vibration, sensors |
+| [`examples/lumenduo.html`](examples/lumenduo.html) | Lumen Duo glasses display: text in colour, pictures, buttons, brightness, vibration, battery |
 | [`examples/counter.html`](examples/counter.html) | Shared state |
 | [`examples/chat.html`](examples/chat.html) | Messages, request/answer (round trip), screen flash, reveal, 200 KB message |
 | [`examples/card.html`](examples/card.html) | Performer picks a card, spectator sees it; sync for a guest that connects late |
@@ -123,12 +124,13 @@ aurakit-mock.js     Desktop simulator (only with ?mock=…, never inside Aura)
 aurakit-ui.css      iOS-style dark theme (optional)
 aurakit-ui.js       UI helpers and HTML attributes (optional)
 aurakit-i18n.js     Translations (optional)
-devices/            Atom 2, PeekSmith 3, AuraPeek, Nova Pen, PLB and MysterBox drivers (optional)
+devices/            Atom 2, PeekSmith 3, AuraPeek, Nova Pen, PLB, MysterBox and Lumen Duo drivers (optional)
 server/             aurakit-devices.php (registerDevice, checkDevice), aurakit-admin.php and a demo to upload (optional, PHP)
 examples/           One short HTML file per feature
 templates/          Pages to copy and start from
 docs/API.md         Full reference
 docs/MYSTERBOX.md   MysterBox guide and driver reference
+docs/LUMENDUO.md    Lumen Duo driver reference and protocol
 ```
 
 ## Documentation

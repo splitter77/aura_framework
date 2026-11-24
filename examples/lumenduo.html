@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Aura Lumen Duo</title>
+  <script src="../aurakit-i18n.js" data-default="fr" data-languages="fr,en"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; padding: 16px; padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: 150px; background: #000; color: #eee; font: 16px -apple-system, system-ui, sans-serif; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8e8e93; margin: 0 0 8px; font-weight: 600; }
+    section { background: #1c1c1e; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    button, input, select, textarea { font: inherit; border-radius: 8px; border: 0; padding: 10px 12px; }
+    button { background: #0a84ff; color: #fff; }
+    button.secondary { background: #3a3a3c; }
+    input[type=text], textarea, select { background: #2c2c2e; color: #fff; width: 100%; box-sizing: border-box; }
+    textarea { resize: vertical; min-height: 60px; }
+    input[type=range] { width: 100%; padding: 0; }
+    input[type=color] { padding: 0; width: 44px; height: 40px; background: none; flex: 0 0 auto; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+    .row > * { flex: 1; }
+    .hint { font-size: 14px; color: #8e8e93; margin: 8px 0 0; }
+    #status { font-size: 14px; color: #8e8e93; margin-left: 8px; }
+    #preview { display: block; width: 100%; max-width: 480px; image-rendering: pixelated; border-radius: 8px; background: #000; border: 1px solid #333; }
+    .pads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pad { display: grid; place-items: center; height: 70px; border-radius: 14px; background: #2c2c2e; color: #8e8e93; font-weight: 600; transition: background .1s, color .1s; text-align: center; }
+    .pad.hit { background: #0a84ff; color: #fff; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; margin-top: 8px; }
+    .stats div { background: #2c2c2e; border-radius: 8px; padding: 8px; overflow-wrap: anywhere; }
+    .stats b { display: block; color: #8e8e93; font: 600 11px -apple-system, system-ui, sans-serif; text-transform: uppercase; margin-bottom: 2px; }
+    label.check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 15px; }
+    #log { font: 12px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #a1a1a6; -webkit-user-select: text; user-select: text; }
+    [disabled] { opacity: .4; }
+    header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    nav.lang { display: flex; gap: 2px; flex: 0 0 auto; }
+    nav.lang button { background: none; color: #8e8e93; padding: 4px 6px; font-size: 14px; }
+    nav.lang button[aria-current="true"] { color: #fff; font-weight: 600; }
+    #error { display: none; background: #3a1d1d; color: #ff9f99; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Aura Lumen Duo <span id="status" data-en="disconnected">déconnectée</span></h1>
+    <nav class="lang"><button data-set-lang="fr">FR</button><button data-set-lang="en">EN</button></nav>
+  </header>
+  <div id="error" role="alert"></div>
+
+  <section>
+    <button id="connect" data-en="Connect the glasses">Connecter les lunettes</button>
+    <button id="disconnect" class="secondary" disabled data-en="Disconnect">Déconnecter</button>
+    <p class="hint" data-en="Turn the Lumen Duo on, then connect: the page looks for a device named Lumen-ZY-Duo or Lumen_S_Eye.">Allumez la Lumen Duo, puis connectez-la : la page cherche un appareil nommé Lumen-ZY-Duo ou Lumen_S_Eye.</p>
+  </section>
+
+  <section>
+    <h2 data-en="Text">Texte</h2>
+    <textarea id="text" data-needs>Q♥</textarea>
+    <div class="row">
+      <input id="fg" type="color" value="#ffffff" title="Texte / text" data-needs>
+      <input id="bg" type="color" value="#000000" title="Fond / background" data-needs>
+      <button id="sendText" data-needs data-en="Show">Afficher</button>
+      <button id="clear" class="secondary" data-needs data-en="Black">Noir</button>
+    </div>
+    <div class="row">
+      <button class="secondary card" data-needs>A♠</button>
+      <button class="secondary card" data-needs>7♦</button>
+      <button class="secondary card" data-needs>Q♥</button>
+      <button class="secondary card" data-needs>K♣</button>
+      <button class="secondary" id="clock" data-needs data-en="Time">Heure</button>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-en="Picture">Image</h2>
+    <input id="file" type="file" accept="image/*" data-needs>
+    <div class="row">
+      <select id="fit" data-needs>
+        <option value="contain" data-en="Whole picture">Image entière</option>
+        <option value="cover" data-en="Fill">Remplir</option>
+      </select>
+      <label class="check" style="margin:0"><input id="dither" type="checkbox" checked data-needs> <span data-en="Dither">Tramage</span></label>
+      <button id="drawing" class="secondary" data-needs data-en="Test pattern">Mire</button>
+    </div>
+    <p class="hint" data-en="Sent as it will appear: 160 × 80 pixels, one bit each, in the page colours.">Envoyée telle qu'elle apparaîtra : 160 × 80 pixels, un bit chacun, dans les couleurs de la page.</p>
+    <canvas id="preview" width="160" height="80"></canvas>
+  </section>
+
+  <section>
+    <h2 data-en="Buttons">Boutons</h2>
+    <div class="pads">
+      <div class="pad" id="padLeft" data-en="left">gauche</div>
+      <div class="pad" id="padRight" data-en="right">droit</div>
+    </div>
+    <label class="check"><input id="react" type="checkbox" checked> <span data-en="Show each press on the glasses">Afficher chaque appui sur les lunettes</span></label>
+  </section>
+
+  <section>
+    <h2 data-en="Settings">Réglages</h2>
+    <label><span data-en="Brightness">Luminosité</span> <span id="levelText">90 %</span>
+      <input id="level" type="range" min="0" max="100" value="90" data-needs></label>
+    <label><span data-en="Vibration">Vibration</span> <span id="vibText">50 %</span>
+      <input id="vib" type="range" min="0" max="100" value="50"></label>
+    <div class="row">
+      <button id="vibrate" class="secondary" data-needs data-en="Vibrate">Vibrer</button>
+      <button id="statusBar" class="secondary" data-needs data-en="Status bar">Barre d'état</button>
+    </div>
+    <label class="check"><input id="leftHanded" type="checkbox"> <span data-en="Left-handed (rotate 180°)">Gaucher (rotation 180°)</span></label>
+    <label class="check"><input id="mirror" type="checkbox"> <span data-en="Mirror (horizontal flip)">Miroir (retournement horizontal)</span></label>
+  </section>
+
+  <section>
+    <h2>Lumen Duo</h2>
+    <div class="stats">
+      <div><b data-en="Battery">Batterie</b><span id="batt">—</span></div>
+      <div><b data-en="Charge">Charge</b><span id="charge">—</span></div>
+      <div><b>Firmware</b><span id="ver">—</span></div>
+    </div>
+    <div class="row"><button id="firmware" class="secondary" data-needs data-en="Read the version">Lire la version</button></div>
+  </section>
+
+  <section>
+    <h2 data-en="Log">Journal</h2>
+    <div id="log"></div>
+  </section>
+
+  <script src="../aurakit-mock.js"></script>
+  <script src="../devices/aura-lumenduo.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    if (typeof window.t !== 'function') window.t = (fr) => fr;
+    // If a script did not load (wrong path, file not uploaded), say so instead of failing silently.
+    const src = (name) => (document.querySelector('script[src*="' + name + '"]') || {}).src || name;
+    const missing = [typeof AuraI18n === 'undefined' && src('aurakit-i18n'), typeof AuraLumenDuo === 'undefined' && src('aura-lumenduo')].filter(Boolean);
+    if (missing.length) {
+      $('error').textContent = 'Script(s) introuvable(s) / missing: ' + missing.join(', ');
+      $('error').style.display = 'block';
+      throw new Error('Missing ' + missing.join(', '));
+    }
+    const log = (s) => { $('log').textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + $('log').textContent; };
+    const STATES = {
+      permission: t('autorisation Bluetooth…', 'Bluetooth permission…'), scanning: t('recherche…', 'searching…'),
+      connecting: t('connexion…', 'connecting…'), connected: t('connectée', 'connected'),
+      reconnecting: t('reconnexion…', 'reconnecting…'), disconnected: t('déconnectée', 'disconnected'),
+    };
+    const BUTTON_NAMES = { left: t('gauche', 'left'), right: t('droit', 'right') };
+    const PRESS_NAMES = { single: t('appui', 'press'), double: t('double appui', 'double press'), long: t('appui long', 'long press') };
+    let duo = null;
+
+    const setConnected = (on) => {
+      document.querySelectorAll('[data-needs]').forEach((el) => { el.disabled = !on; });
+      const active = !!(duo && !duo._manual);
+      $('connect').disabled = active;
+      $('disconnect').disabled = !active;
+    };
+    setConnected(false);
+    const showError = (msg) => { $('error').textContent = msg || ''; $('error').style.display = msg ? 'block' : 'none'; };
+    const run = (fn) => async () => { try { await fn(); } catch (e) { showError(e.message); log('⚠️ ' + e.message); } };
+
+    // What the glasses will show: the 1-bit picture in the page colours.
+    const preview = (canvas, options) => {
+      const bits = duo.toBitmap(canvas, options), H = duo.height, out = $('preview');
+      out.height = H;
+      const g = out.getContext('2d'), img = g.createImageData(160, H);
+      const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const fg = hex(options.color || $('fg').value), bg = hex(options.background || $('bg').value);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < 160; x++) {
+          const c = bits[y * 20 + (x >> 3)] & (1 << (x & 7)) ? fg : bg;   // bit 0 = leftmost pixel
+          img.data.set([c[0], c[1], c[2], 255], (y * 160 + x) * 4);
+        }
+      }
+      g.putImageData(img, 0, 0);
+    };
+    const colours = () => ({ color: $('fg').value, background: $('bg').value });
+    const showText = async (value) => {
+      const canvas = await duo.text(value, colours());
+      preview(canvas, colours());
+      log('→ ' + t('texte', 'text') + ' « ' + value.replace(/\n/g, ' ⏎ ') + ' »');
+    };
+
+    $('connect').onclick = run(async () => {
+      showError('');
+      if (duo) await duo.disconnect();
+      duo = new AuraLumenDuo({
+        lang: AuraI18n.lang, brightness: Number($('level').value), vibrationStrength: $('vib').value / 100,
+        leftHanded: $('leftHanded').checked, mirror: $('mirror').checked,
+      });
+      duo.on('status', ({ state, name, attempt }) => {
+        $('status').textContent = (STATES[state] || state) + (name ? ' · ' + name : '');
+        setConnected(state === 'connected');
+        if (state === 'connected') showError('');
+        if (state !== 'scanning' && state !== 'reconnecting') log(t('état : ', 'state: ') + (STATES[state] || state) + (name ? ' (' + name + ')' : ''));
+        else if (state === 'reconnecting' && attempt === 1) log(STATES.reconnecting);
+      });
+      duo.on('connect', () => { $('preview').height = duo.height; showText('DUO').catch((e) => log('⚠️ ' + e.message)); });
+      duo.on('button', ({ button, press, code }) => {
+        const pad = $(button === 'left' ? 'padLeft' : 'padRight');
+        pad.textContent = PRESS_NAMES[press];
+        pad.classList.add('hit');
+        setTimeout(() => { pad.classList.remove('hit'); pad.textContent = BUTTON_NAMES[button]; }, 600);
+        log('← ' + BUTTON_NAMES[button] + ' · ' + PRESS_NAMES[press] + ' (' + code + ')');
+        if ($('react').checked) showText((button === 'left' ? '◀ ' : '') + PRESS_NAMES[press] + (button === 'right' ? ' ▶' : '')).catch(() => {});
+      });
+      duo.on('battery', ({ volts, percent, charging, full, raw }) => {
+        $('batt').textContent = volts != null ? volts.toFixed(2) + ' V ≈ ' + percent + ' %' : '—';
+        $('charge').textContent = full ? t('pleine', 'full') : charging ? t('en charge', 'charging') : t('non', 'no');
+        log('← ' + raw);
+      });
+      duo.on('firmware', ({ version, raw }) => { $('ver').textContent = version; log('← ' + raw); });
+      duo.on('message', ({ text }) => log('← ' + text));
+      $('connect').disabled = true;
+      try { await duo.connect(); }
+      catch (e) { $('status').textContent = STATES.disconnected; duo = null; setConnected(false); throw e; }
+    });
+
+    $('disconnect').onclick = run(async () => { await duo.disconnect(); $('status').textContent = STATES.disconnected; setConnected(false); });
+
+    $('sendText').onclick = run(() => showText($('text').value));
+    document.querySelectorAll('.card').forEach((b) => { b.onclick = run(() => showText(b.textContent)); });
+    $('clock').onclick = run(() => showText(new Date().toTimeString().slice(0, 5)));
+    $('clear').onclick = run(async () => {
+      await duo.clear();
+      $('preview').getContext('2d').clearRect(0, 0, 160, 80);
+      log('→ ' + t('noir', 'black'));
+    });
+
+    $('file').onchange = run(async () => {
+      const file = $('file').files[0];
+      if (!file) return;
+      const options = Object.assign({ fit: $('fit').value, dither: $('dither').checked }, colours());
+      const canvas = await duo.image(file, options);
+      preview(canvas, options);
+      log('→ ' + t('image ', 'picture ') + file.name);
+    });
+    $('drawing').onclick = run(async () => {
+      const c = document.createElement('canvas'), H = duo.height;
+      c.width = 160; c.height = H;
+      const g = c.getContext('2d');
+      g.fillStyle = '#000'; g.fillRect(0, 0, 160, H);
+      g.strokeStyle = '#fff'; g.lineWidth = 2; g.strokeRect(1, 1, 158, H - 2);
+      for (let x = 0; x < 160; x += 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(160 - x, H); g.stroke(); }
+      const grad = g.createLinearGradient(20, 0, 140, 0);
+      grad.addColorStop(0, '#000'); grad.addColorStop(1, '#fff');
+      g.fillStyle = grad; g.fillRect(20, H / 2 - 10, 120, 20);
+      const options = Object.assign({ fit: 'stretch', dither: $('dither').checked }, colours());
+      const sent = await duo.image(c, options);
+      preview(sent, options);
+      log('→ ' + t('mire', 'test pattern'));
+    });
+
+    $('level').oninput = () => { $('levelText').textContent = $('level').value + ' %'; };
+    $('level').onchange = run(() => duo.brightness($('level').value));
+    $('vib').oninput = () => { $('vibText').textContent = $('vib').value + ' %'; if (duo) duo.setVibrationStrength($('vib').value / 100); };
+    $('vibrate').onclick = run(() => duo.vibrate());
+    $('statusBar').onclick = run(() => duo.toggleStatusBar());
+    $('leftHanded').onchange = () => { if (duo) duo.leftHanded = $('leftHanded').checked; };
+    $('mirror').onchange = () => { if (duo) duo.mirror = $('mirror').checked; };
+    $('firmware').onclick = run(async () => { $('ver').textContent = (await duo.requestFirmware()) || '—'; });
+
+    if (window.Aura && window.Aura.__mock) log(t('Simulateur : les boutons L / R du panneau Lumen Duo (en bas à gauche) simulent les boutons des lunettes.',
+      'Simulator: the L / R buttons of the Lumen Duo panel (bottom left) simulate the buttons of the glasses.'));
+    if (!AuraLumenDuo.isAvailable()) showError(t('Ouvrez cette page dans Aura (HTTPS, domaine en favori), ou ajoutez ?mock=host pour le simulateur.',
+      'Open this page in Aura (HTTPS, bookmarked domain), or add ?mock=host for the simulator.'));
+  </script>
+</body>
+</html>
