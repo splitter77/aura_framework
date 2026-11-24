@@ -20,6 +20,7 @@ It is one script with no dependencies and no build step. It wraps the native `wi
 | `AuraKit.camera` | Camera, torch, JPEG snapshots. |
 | `AuraKit.contact` | Contact card (virtual business card) ready to save: native sheet in Aura, `.vcf` file elsewhere. Links to other apps (`whatsapp://`, `shortcuts://`…) open them with no code. |
 | `AuraKit.device()` | Device identifiers. |
+| `AuraKit.registerDevice()` | Records each phone that opened the App Clip in a `devices_appcliped/` folder on your server (with `server/aurakit-devices.php`). `AuraKit.checkDevice()` sends a phone whose file says `"off"` to another page; `server/aurakit-admin.php` lists the phones and turns them off or on. |
 | iframes | A page inside an iframe gets the same API through its parent page (Aura itself does not answer iframes). |
 
 Optional add-ons:
@@ -122,6 +123,7 @@ aurakit-ui.css      iOS-style dark theme (optional)
 aurakit-ui.js       UI helpers and HTML attributes (optional)
 aurakit-i18n.js     Translations (optional)
 devices/            Atom 2, PeekSmith 3, AuraPeek, Nova Pen, PLB and MysterBox drivers (optional)
+server/             aurakit-devices.php (registerDevice, checkDevice) and aurakit-admin.php (optional, PHP)
 examples/           One short HTML file per feature
 templates/          Pages to copy and start from
 docs/API.md         Full reference

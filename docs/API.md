@@ -587,6 +587,84 @@ const info = await AuraKit.device();   // null outside Aura
 
 The result is not cached: call `device()` again to get the current theme, orientation or text size. Older Aura versions return only the first six fields.
 
+### Recording App Clip phones: `AuraKit.registerDevice()`
+
+```js
+AuraKit.registerDevice()
+  .then((r) => { if (r.registered) console.log('phone', r.id, 'launch #' + r.launches); })
+  .catch((e) => console.warn(e.message));
+```
+
+Records the phone that opened the page in the App Clip in a `devices_appcliped/` folder on the page's server, one JSON file per phone, updated on every launch. AuraKit only runs in the phone, so the writing is done by a small PHP script: copy [`server/aurakit-devices.php`](../server/aurakit-devices.php) next to your page (any PHP host, Hostinger shared hosting included). It creates `devices_appcliped/` next to itself, with an `.htaccess` that keeps the folder private (Apache, LiteSpeed; on nginx, deny it in the server config).
+
+The phone's id: Aura gives the App Clip no identifier of its own for the phone (`vendorId` is empty, `userId` is the tag's, the same for every phone that scans it). `AuraKit.deviceId()` makes one: a random UUID created on the first call and kept in the site's `localStorage` (`aurakit.deviceId`). It stays the same across launches until iOS deletes the App Clip's data (after a long time without use, or when the user removes it); the phone then gets a new id. It is per site, and Aura Browser and the App Clip each have their own.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `url` | `'aurakit-devices.php'` | The script, relative to the page. |
+| `appClipOnly` | `true` | Outside the App Clip, send nothing and resolve with `{ registered: false, id, reason }`. `false` also records Aura Browser and plain browsers. |
+| `extra` | none | Any JSON value to keep with the phone (a show name, a code…). Replaced on each launch. |
+| `timeout` | `8000` | Milliseconds to wait for the server. |
+
+Resolves to `{ registered: true, id, status, launches, firstSeen, lastSeen, isNew }`. Rejects with a readable message when the server cannot be reached or answers an error (script missing, folder not writable).
+
+What a file holds (`devices_appcliped/<id>.json`):
+
+```json
+{
+  "id": "3f1c…", "status": "on", "first_seen": "2026-11-24T20:31:05+00:00", "last_seen": "2026-11-24T21:02:44+00:00", "launches": 3,
+  "app_clip": true, "tag": "<userId of the tag>", "page": "https://example.com/show/",
+  "model": "iPhone", "model_identifier": "iPhone16,2", "model_name": "iPhone 15 Pro Max",
+  "system_name": "iOS", "system_version": "26.1", "language": "fr", "region": "FR", "time_zone": "Europe/Paris",
+  "screen": "1290x2796", "user_agent": "…", "extra": null
+}
+```
+
+The script accepts only a POST from the same site (add others to `ALLOWED_ORIGINS`), bodies under 16 KB and ids that are UUIDs. This keeps casual misuse out, not a determined one: anyone can post to a public URL, so do not trust the files as proof that a phone really ran the App Clip.
+
+In the simulator (`?mock=join`) the call is sent like in the App Clip; both tabs share `localStorage`, so they share one id. `python3 -m http.server` does not run PHP: use `php -S localhost:8770` to test the script.
+
+### Turning a phone off: `AuraKit.checkDevice()`
+
+```html
+<head>
+  <script src="aurakit.js"></script>
+  <script>
+    AuraKit.checkDevice({ redirect: 'blocked.html' })
+      .then((r) => { if (!r.redirected) AuraKit.registerDevice(); });
+  </script>
+</head>
+```
+
+Every file in `devices_appcliped/` has a `"status"`: `"on"` for a new phone. To turn a phone off, edit its file on the server (Hostinger file manager, FTP…) and set `"status": "off"`. On its next launch, `checkDevice()` asks the script for this phone's status and sends the phone to `redirect`; with `"on"` the page goes on as usual. `registerDevice()` keeps the status you set.
+
+Call it in the `<head>`, right after `aurakit.js`: the page stays hidden (`visibility: hidden` on `<html>`) until the server answers, so a phone that is off never sees it. The redirect replaces the page in the history, so Back does not return to it.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `redirect` | none | Page for a phone that is off, relative to the current page or a full URL. Without it, nothing redirects: read `status` yourself. |
+| `url` | `'aurakit-devices.php'` | The script, relative to the page. |
+| `appClipOnly` | `true` | Outside the App Clip, check nothing and go on (`status: 'skipped'`). |
+| `unknown` | `'continue'` | A phone with no file yet (its first launch): `'continue'` or `'redirect'`. `'redirect'` lets in only phones you have recorded before. |
+| `onError` | `'continue'` | Server unreachable, script missing, timeout: `'continue'` (the show goes on if the network fails) or `'redirect'`. |
+| `hidePage` | `true` | Hide the page until the answer. |
+| `timeout` | `5000` | Milliseconds to wait for the server. |
+
+Resolves to `{ status, id, redirected, reason }`, `status` being `'on'`, `'off'`, `'unknown'` (no file), `'error'` or `'skipped'`. It never rejects. A `redirect` that points to the current page is ignored, to avoid a loop.
+
+The check happens in the phone: it keeps casual users out, not someone who reads the page's source. The script answers `GET aurakit-devices.php?id=<id>` with `{ ok, id, found, status }`.
+
+### Admin page: `server/aurakit-admin.php`
+
+Instead of editing the files by hand, copy [`server/aurakit-admin.php`](../server/aurakit-admin.php) next to `aurakit-devices.php`, open it on the server and set `ADMIN_PASSWORD` (the page refuses to open while it is empty). Then open `https://your-site/…/aurakit-admin.php` in any browser:
+
+- the list of the phones recorded in `devices_appcliped/`, most recent first: status, model, iOS, id, `extra`, last and first launch, number of launches;
+- **Passer en off / on** on each row;
+- check boxes and **Sélection en off / on** for several phones;
+- **Tout passer en off / on** for every phone (or every phone of the chosen page, when the folder holds phones from several pages).
+
+The change takes effect at the phone's next launch, through `checkDevice()`. The page needs the password once per browser session, protects its forms against cross-site requests, waits two seconds after a wrong password and is not indexed. Use HTTPS, and pick a long password: anyone who has it can turn phones off.
+
 ## 14. Events and raw calls
 
 ```js

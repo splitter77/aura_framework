@@ -16,6 +16,8 @@
  *   AuraKit.camera        camera, torch, snapshots
  *   AuraKit.contact       contact card (virtual business card), ready to save
  *   AuraKit.device()      device identifiers
+ *   AuraKit.registerDevice()  records the phone that opened the App Clip in devices_appcliped/ on the server
+ *   AuraKit.checkDevice()     sends the phone to another page when its file there says "off"
  *   AuraKit.quitAppClip() closes the App Clip
  *   iframes               pages inside an iframe get the same API through their parent page
  *
@@ -367,6 +369,135 @@
       if (!e.available || (e.caps && e.caps.deviceInfo === false)) return null;
       return call('deviceInfo').catch(function () { return null; });
     });
+  }
+
+  // ------------------------------------------------------------------ Device id and registration
+  // Aura gives the App Clip no identifier of its own for the phone (vendorId is empty, userId is the tag's),
+  // so AuraKit makes one: a random UUID kept in localStorage. It lasts until iOS deletes the App Clip's data.
+  var DEVICE_ID_KEY = 'aurakit.deviceId';
+  var memoryDeviceId = null;
+  function newUuid() {
+    if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    var b = new Uint8Array(16);
+    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(b);
+    else for (var i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function (x) { return (x + 256).toString(16).slice(1); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /** This phone's identifier for this site: a UUID made on the first call and kept in localStorage. */
+  function deviceId() {
+    var id = null;
+    try { id = localStorage.getItem(DEVICE_ID_KEY); } catch (e) { /* storage blocked */ }
+    if (id && UUID_RE.test(id)) return id.toLowerCase();
+    if (memoryDeviceId) return memoryDeviceId;
+    id = newUuid().toLowerCase();
+    try { localStorage.setItem(DEVICE_ID_KEY, id); } catch (e) { memoryDeviceId = id; }
+    return id;
+  }
+
+  /** Sends this phone's id and info to a script on the page's server (server/aurakit-devices.php), which
+   * keeps one file per phone in devices_appcliped/. Only in the App Clip unless appClipOnly is false.
+   * options: { url = 'aurakit-devices.php', appClipOnly = true, extra, timeout = 8000 }.
+   * Resolves to { registered: true, id, launches, firstSeen, lastSeen, isNew } or { registered: false, id, reason }. */
+  async function registerDevice(options) {
+    var o = options || {};
+    var e = await ready();
+    var id = deviceId();
+    if (o.appClipOnly !== false && !e.appClip) {
+      return { registered: false, id: id, reason: e.available ? 'Not in the App Clip.' : e.reason };
+    }
+    var info = (await device()) || {};
+    var screen = info.screen || {};
+    var locale = info.locale || {};
+    var body = {
+      id: id,
+      appClip: !!e.appClip,
+      tag: info.userId || null,
+      page: location.href.split('#')[0],
+      model: info.model || null,
+      modelIdentifier: info.modelIdentifier || null,
+      modelName: info.modelName || null,
+      systemName: info.systemName || null,
+      systemVersion: info.systemVersion || null,
+      language: locale.language || null,
+      region: locale.region || null,
+      timeZone: locale.timeZone || null,
+      screen: screen.nativeWidth ? screen.nativeWidth + 'x' + screen.nativeHeight : null,
+      extra: o.extra === undefined ? null : o.extra,
+    };
+    var url = new URL(o.url || 'aurakit-devices.php', location.href).href;
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, o.timeout || 8000) : null;
+    var res;
+    try {
+      res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        credentials: 'same-origin', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined,
+      });
+    } catch (err) {
+      throw new Error('registerDevice: ' + (err && err.name === 'AbortError' ? 'the server did not answer.' : 'could not reach ' + url + '.'));
+    } finally { if (timer) clearTimeout(timer); }
+    var data = null;
+    try { data = await res.json(); } catch (err) { /* not JSON */ }
+    if (!res.ok || !data || !data.ok) {
+      throw new Error('registerDevice: ' + ((data && data.error) || 'the server answered ' + res.status + ' (is ' + url + ' installed?).'));
+    }
+    return { registered: true, id: data.id, status: data.status || 'on', launches: data.launches, firstSeen: data.first_seen,
+      lastSeen: data.last_seen, isNew: !!data.new };
+  }
+
+  /** Asks the server for this phone's status ("on" or "off" in its devices_appcliped/ file) and goes to
+   * options.redirect when it is "off". Call it as early as possible: the page is hidden until it answers.
+   * options: { redirect, url = 'aurakit-devices.php', appClipOnly = true, unknown = 'continue',
+   *            onError = 'continue', hidePage = true, timeout = 5000 }.
+   * Resolves to { status: 'on' | 'off' | 'unknown' | 'error' | 'skipped', id, redirected, reason }. */
+  async function checkDevice(options) {
+    var o = options || {};
+    var html = document.documentElement;
+    var hidden = o.hidePage !== false && !html.style.visibility;
+    if (hidden) html.style.visibility = 'hidden';
+    var show = function () { if (hidden) { html.style.visibility = ''; hidden = false; } };
+    var id = deviceId();
+    var result;
+    try {
+      var e = await ready();
+      if (o.appClipOnly !== false && !e.appClip) {
+        result = { status: 'skipped', id: id, redirected: false, reason: e.available ? 'Not in the App Clip.' : e.reason };
+      } else {
+        var url = new URL(o.url || 'aurakit-devices.php', location.href);
+        url.searchParams.set('id', id);
+        var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+        var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, o.timeout || 5000) : null;
+        try {
+          var res = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
+          var data = null;
+          try { data = await res.json(); } catch (err) { /* not JSON */ }
+          if (!res.ok || !data || !data.ok) throw new Error((data && data.error) || 'the server answered ' + res.status + '.');
+          result = { status: !data.found ? 'unknown' : data.status === 'off' ? 'off' : 'on', id: id, redirected: false };
+        } catch (err) {
+          result = { status: 'error', id: id, redirected: false,
+            reason: err && err.name === 'AbortError' ? 'the server did not answer.' : (err && err.message) || String(err) };
+        } finally { if (timer) clearTimeout(timer); }
+      }
+    } catch (err) {
+      result = { status: 'error', id: id, redirected: false, reason: (err && err.message) || String(err) };
+    }
+    var go = result.status === 'off' || (result.status === 'unknown' && o.unknown === 'redirect') ||
+      (result.status === 'error' && o.onError === 'redirect');
+    if (go && o.redirect) {
+      var target = new URL(o.redirect, location.href);
+      if (target.href.split('#')[0] !== location.href.split('#')[0]) {
+        result.redirected = true;
+        location.replace(target.href);
+        return result;            // the page stays hidden while the browser leaves it
+      }
+      result.reason = 'redirect points to this page.';
+    }
+    if (result.status === 'error') console.warn('[AuraKit] checkDevice:', result.reason);
+    show();
+    return result;
   }
 
   // ------------------------------------------------------------------ Proximity
@@ -1693,6 +1824,12 @@
     haptics: haptics,
     haptic: function () { return haptics.play.apply(null, arguments); },
     device: device,
+    /** This phone's id for this site (a UUID kept in localStorage). */
+    deviceId: deviceId,
+    /** Records this phone in devices_appcliped/ on the page's server (needs server/aurakit-devices.php). */
+    registerDevice: registerDevice,
+    /** Goes to options.redirect when this phone is "off" in devices_appcliped/; otherwise the page goes on. */
+    checkDevice: checkDevice,
     proximity: proximity,
     statusBar: statusBar,
     orientation: orientation,
