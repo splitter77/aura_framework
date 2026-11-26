@@ -13,6 +13,7 @@ It is one script with no dependencies and no build step. It wraps the native `wi
 | `AuraKit.proximity` | Proximity sensor. |
 | `AuraKit.flic` | **Flic 2 buttons**: pairing, single / double / hold or instant press, actions per gesture and per button, `data-flic` elements clicked without code. |
 | `AuraKit.statusBar` | Show or hide the iOS status bar at any time (`hide()`, `show()`, `toggle()`). |
+| `AuraKit.systemGestures` | Edge swipes: the first one goes to the page instead of iOS (`defer()`, `allow()`, `reset()`). |
 | `AuraKit.orientation` | Lock the screen rotation (`lock('portrait')`, `lock()` = as it is now, `unlock()`). |
 | `AuraKit.volumeButtons` | The volume buttons as triggers, without changing the volume or showing the iOS indicator. |
 | `AuraKit.keyboard` | Native buttons above the keyboard, text formatting bar, input bar glued to the keyboard. |
