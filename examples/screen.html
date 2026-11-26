@@ -14,6 +14,13 @@
     .ak-row .ak-btn { flex: 1; }
     #presses { font-size: 48px; text-align: center; padding: 8px; font-variant-numeric: tabular-nums; }
     #last { text-align: center; }
+    #edgeLog { text-align: center; min-height: 1.4em; }
+    .edge-flash { position: fixed; z-index: 10; pointer-events: none; background: rgba(10, 132, 255, .55); opacity: 0; transition: opacity .6s; }
+    .edge-flash.on { opacity: 1; transition: none; }
+    #flash-top { top: 0; left: 0; right: 0; height: 6px; }
+    #flash-bottom { bottom: 0; left: 0; right: 0; height: 6px; }
+    #flash-left { top: 0; bottom: 0; left: 0; width: 6px; }
+    #flash-right { top: 0; bottom: 0; right: 0; width: 6px; }
   </style>
 </head>
 <body class="ak">
@@ -42,6 +49,25 @@
     <pre class="ak-kv" id="rotState">…</pre>
   </div>
 
+  <h2 data-en="Swipe to quit">Glisser pour quitter</h2>
+  <div class="ak-card">
+    <div class="ak-row">
+      <button class="ak-btn" id="sgAll" data-en="Every edge">Tous les bords</button>
+      <button class="ak-btn" id="sgBottom" data-en="Bottom only">Bas seulement</button>
+    </div>
+    <div class="ak-row">
+      <button class="ak-btn" id="sgAllow" data-en="No edge">Aucun bord</button>
+      <button class="ak-btn" id="sgReset" data-en="Default">Par défaut</button>
+    </div>
+    <pre class="ak-kv" id="sgState">…</pre>
+    <p class="ak-muted" id="edgeLog" data-en="Swipe from an edge of the screen.">Glissez depuis un bord de l'écran.</p>
+    <p class="ak-muted" data-en="On a protected edge, the first swipe stays in the page (the edge lights up) and a second swipe quits or opens Control Center. On the other edges, a single swipe is enough. Default: every edge in the App Clip, none in Aura Browser. Back to the default on the next page.">Sur un bord protégé, le premier glissement reste dans la page (le bord s'allume) et un deuxième glissement quitte l'app ou ouvre le centre de contrôle. Sur les autres bords, un seul glissement suffit. Par défaut : tous les bords dans l'App Clip, aucun dans Aura Browser. Le réglage par défaut revient à la page suivante.</p>
+  </div>
+  <div class="edge-flash" id="flash-top"></div>
+  <div class="edge-flash" id="flash-bottom"></div>
+  <div class="edge-flash" id="flash-left"></div>
+  <div class="edge-flash" id="flash-right"></div>
+
   <h2 data-en="Volume buttons">Boutons de volume</h2>
   <div class="ak-card">
     <div id="presses">0</div>
@@ -59,9 +85,10 @@
 
     (async () => {
       const env = await AuraKit.ready();
-      if (!env.available) { show('barState', env.reason); show('rotState', env.reason); return; }
+      if (!env.available) { show('barState', env.reason); show('rotState', env.reason); show('sgState', env.reason); return; }
       run('barState', () => AuraKit.statusBar.get());
       run('rotState', () => AuraKit.orientation.get());
+      run('sgState', () => AuraKit.systemGestures.get());
     })();
 
     $('barHide').onclick = () => run('barState', () => AuraKit.statusBar.hide());
@@ -72,6 +99,26 @@
     $('lockPortrait').onclick = () => run('rotState', () => AuraKit.orientation.lock('portrait'));
     $('lockLandscape').onclick = () => run('rotState', () => AuraKit.orientation.lock('landscape'));
     $('unlock').onclick = () => run('rotState', () => AuraKit.orientation.unlock());
+
+    $('sgAll').onclick = () => run('sgState', () => AuraKit.systemGestures.defer());
+    $('sgBottom').onclick = () => run('sgState', () => AuraKit.systemGestures.defer(['bottom']));
+    $('sgAllow').onclick = () => run('sgState', () => AuraKit.systemGestures.allow());
+    $('sgReset').onclick = () => run('sgState', () => AuraKit.systemGestures.reset());
+
+    // A swipe that reaches the page from an edge: light up that edge.
+    const EDGE = 24;
+    const edgeNames = { top: t('le haut', 'the top'), bottom: t('le bas', 'the bottom'), left: t('la gauche', 'the left'), right: t('la droite', 'the right') };
+    document.addEventListener('touchstart', (e) => {
+      const p = e.touches[0];
+      const edge = p.clientY < EDGE ? 'top' : p.clientY > innerHeight - EDGE ? 'bottom'
+        : p.clientX < EDGE ? 'left' : p.clientX > innerWidth - EDGE ? 'right' : null;
+      if (!edge) return;
+      const bar = $('flash-' + edge);
+      bar.classList.add('on');
+      requestAnimationFrame(() => requestAnimationFrame(() => bar.classList.remove('on')));
+      $('edgeLog').textContent = t('Glissement depuis ' + edgeNames[edge] + ' reçu par la page', 'Swipe from ' + edgeNames[edge] + ' received by the page');
+      AuraKit.haptics.tap();
+    }, { passive: true });
 
     let watcher = null, presses = 0;
     $('volBtn').onclick = async () => {
