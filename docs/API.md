@@ -7,7 +7,7 @@
 5. [Shared state: `link.shared()`](#5-shared-state-linkshared)
 6. [Bluetooth LE: `AuraKit.ble`](#6-bluetooth-le-aurakitble)
 7. [Proximity: `AuraKit.proximity`](#7-proximity-aurakitproximity)
-8. [Screen and buttons: `statusBar`, `orientation`, `volumeButtons`](#8-screen-and-buttons-statusbar-orientation-volumebuttons) — with [swipes from the screen edges](#swipes-from-the-screen-edges) and the experimental [Liquid Glass buttons](#liquid-glass-buttons-experimental-aurakitexperimentalglass)
+8. [Screen and buttons: `statusBar`, `orientation`, `volumeButtons`](#8-screen-and-buttons-statusbar-orientation-volumebuttons) — with [swipes from the screen edges](#swipes-from-the-screen-edges-aurakitsystemgestures) and the experimental [Liquid Glass buttons](#liquid-glass-buttons-experimental-aurakitexperimentalglass)
 9. [Keyboard: `AuraKit.keyboard`](#9-keyboard-aurakitkeyboard)
 10. [Camera and torch: `AuraKit.camera`](#10-camera-and-torch-aurakitcamera)
 11. [Flic buttons: `AuraKit.flic`](#11-flic-buttons-aurakitflic)
@@ -50,7 +50,7 @@ Resolves once (later calls return the same promise) to:
 | `available` | `true` when native features work on this page. |
 | `appClip` | `true` in the AuraClip App Clip. |
 | `browser` | `true` in Aura Browser. |
-| `caps` | `Aura.capabilities()`: `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass, keyboard }`, or `null` (`statusBar` to `liquidGlass` are missing before Aura 1.9, `keyboard` in older versions; `liquidGlass` is `true` on iOS 26 or later). |
+| `caps` | `Aura.capabilities()`: `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, systemGestures, volumeButtons, glass, liquidGlass, keyboard }`, or `null` (`statusBar` to `liquidGlass` are missing before Aura 1.9, `keyboard` in older versions; `liquidGlass` is `true` on iOS 26 or later; `systemGestures` is missing in older versions). |
 | `frame` | `true` when the page is inside an iframe. |
 | `proxied` | `true` when an iframe uses Aura through its parent page (see [iframes](#15-iframes)). |
 | `mock` | `true` with the desktop simulator. |
@@ -308,9 +308,29 @@ Notes:
 - Watching activates the app's audio session in a mode that does not stop music from other apps.
 - In the **App Clip**, Apple does not give App Clips the framework Aura uses to hide the indicator and keep the volume (Media Player): presses are still detected, but the iOS volume indicator may appear and the volume may move, and once the volume reaches the maximum (or zero) that button is no longer detected. Test it on your device.
 
-### Swipes from the screen edges
+### Swipes from the screen edges: `AuraKit.systemGestures`
 
-In full screen (the App Clip, or full-screen mode in Aura Browser), a swipe that starts at an edge of the screen goes to the page first, as ordinary touch events, instead of opening Control Center, the notifications or the Home screen. A second swipe right after does what it normally does. There is nothing to call: handle the touches as usual, and add `touch-action: none` on the drawing or game area so the page does not scroll.
+A swipe from an edge of the screen normally goes to iOS: the Home screen from the bottom, Control Center and the notifications from the top. On a **deferred** edge, the first swipe goes to the page instead, as ordinary touch events, and only a second swipe right after does what it normally does. iOS never lets a page block these gestures completely.
+
+```js
+await AuraKit.systemGestures.defer();                    // every edge
+await AuraKit.systemGestures.defer(['bottom', 'top']);   // some edges
+await AuraKit.systemGestures.allow();                    // one swipe runs the iOS gesture again
+await AuraKit.systemGestures.reset();                    // back to the default
+const { deferred, default: isDefault } = await AuraKit.systemGestures.get();
+```
+
+| Member | Meaning |
+| --- | --- |
+| `defer(edges = 'all')` | `'all'`, or an array of `'top'`, `'bottom'`, `'left'`, `'right'`. Replaces the previous choice. Resolves to `{ deferred, default }`. |
+| `allow()` | No edge deferred. |
+| `reset()` | Back to the default: every edge in the App Clip, none in Aura Browser. |
+| `get()` | `{ deferred, default }`: the deferred edges, and whether it is the default. |
+| `deferred` | Last known deferred edges (`null` before the first call). |
+
+Without a call, the App Clip defers every edge (as before), and Aura Browser defers none. Like the rest of this section, it goes back to the default when another page loads. Handle the touches as usual, and add `touch-action: none` on the drawing or game area so the page does not scroll.
+
+Older Aura versions do not have it (`AuraKit.systemGestures` rejects with "needs a newer version of Aura"): their App Clip always defers every edge, and so does their Aura Browser.
 
 ### Liquid Glass buttons (experimental): `AuraKit.experimental.glass`
 
@@ -922,7 +942,7 @@ AuraKit is built on the bridge that Aura Browser and the App Clip inject into tr
 
 | Function | Returns |
 | --- | --- |
-| `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, volumeButtons, glass, liquidGlass, contacts, keyboard, flic }` (a key is missing on older Aura versions) |
+| `Aura.capabilities()` | `{ version, appClip, haptics, customHaptics, bluetooth, peer, proximity, deviceInfo, statusBar, orientationLock, systemGestures, volumeButtons, glass, liquidGlass, contacts, keyboard, flic }` (a key is missing on older Aura versions) |
 | `Aura.deviceInfo()` | `{ userId, vendorId, model, systemName, systemVersion, appClip, modelIdentifier, modelName, idiom, screen, appearance, locale }` (see [section 13](#13-device-info-aurakitdevice); older Aura versions return only the first six) |
 | `Aura.haptic(type, options)` / `Aura.haptic({ type: 'pattern', events })` | `impact` (`style`, `intensity`), `notification` (`style`), `selection`, or a pattern. |
 | `Aura.prepareHaptics()` | — |
@@ -934,6 +954,7 @@ AuraKit is built on the bridge that Aura Browser and the App Clip inject into tr
 | `Aura.proximity.start()` / `stop()` | `{ supported, near }` / — |
 | `Aura.statusBar.set({ hidden, transparent })` / `show({ transparent })` / `hide()` / `get()` | `{ hidden, transparent, fullScreen }` |
 | `Aura.orientation.lock(name)` / `unlock()` / `get()` | `{ orientation, locked }` |
+| `Aura.systemGestures.defer(edges = 'all')` / `allow()` / `reset()` / `get()` | `{ deferred, default }`. `edges`: `'all'` or some of `'top'`, `'bottom'`, `'left'`, `'right'`. |
 | `Aura.volumeButtons.start({ keepVolume })` / `stop()` | `{ volume, keepVolume }` / —; event `volumeButton` `{ button, volume }` |
 | `Aura.glass.set({ id, x, y, width, height, fixed, hidden, title, symbol, style, tint, color, fontSize, cornerRadius })` / `frames([{ id, x, y, width, height, fixed, hidden }])` / `remove(id)` / `clear()` | Experimental. Frames in CSS px (document coordinates, or viewport when `fixed`); event `glass.tap` `{ id }` |
 | `Aura.flic.start()`, `state()`, `pair()`, `cancelPairing()`, `arm(value)`, `mode(value)`, `connect(id)`, `disconnect(id)`, `forget(id)` | The state `{ started, restored, bluetooth, scanning, scanStatus, armed, mode, lastError, buttons }`. Events `flic.press` `{ id, buttonID, buttonNumber, gesture, timestamp }` (only while armed) and `flic.state`. See [section 11](#11-flic-buttons-aurakitflic). |

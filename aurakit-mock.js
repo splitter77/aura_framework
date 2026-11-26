@@ -8,7 +8,7 @@
  * Haptics are logged to the console. Press P to toggle the proximity sensor while it is watched.
  * Flic: Aura.flic.pair() adds a fake button after 1.5 s; once armed, keys 1 / 2 / 3 send single / double / hold
  * (any of them sends down in 'immediate' mode).
- * Volume buttons: press + (or =) and - while they are watched. Status bar and rotation lock are logged.
+ * Volume buttons: press + (or =) and - while they are watched. Status bar, rotation lock and edge swipes are logged.
  * Contact card: Aura.contact.add() shows a simple card (name, company, phone, e-mail) with a button to download the .vcf.
  * Glass buttons (experimental): drawn as CSS glass, outlined in pink, where Aura would put the native ones.
  * Bluetooth LE: "Mock Sensor", with a counter notifying every second (service FFE0, characteristic FFE1),
@@ -579,7 +579,7 @@
     version: 1,
     capabilities: function () {
       return ok({ version: 1, appClip: appClip, haptics: true, customHaptics: true, bluetooth: true, peer: true, proximity: true, deviceInfo: true,
-        statusBar: true, orientationLock: true, volumeButtons: true, glass: true, liquidGlass: false, contacts: true, keyboard: true, flic: true });
+        statusBar: true, orientationLock: true, systemGestures: true, volumeButtons: true, glass: true, liquidGlass: false, contacts: true, keyboard: true, flic: true });
     },
     deviceInfo: function () {
       var dark = !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -719,6 +719,29 @@
       unlock: function () { lockedOrientation = null; log('rotation unlocked'); return ok({ orientation: currentOrientation(), locked: null }); },
       get: function () { return ok({ orientation: currentOrientation(), locked: lockedOrientation }); },
     },
+    systemGestures: (function () {
+      var EDGES = ['top', 'bottom', 'left', 'right'];
+      var page = null;
+      var state = function () { return ok({ deferred: (page || (appClip ? EDGES : [])).slice(), 'default': page === null }); };
+      return {
+        defer: function (edges) {
+          var out = [];
+          var list = [].concat(edges === undefined ? 'all' : edges).map(function (e) { return String(e).toLowerCase(); });
+          for (var i = 0; i < list.length; i++) {
+            if (list[i] === 'all') out = EDGES.slice();
+            else if (list[i] === 'none') continue;
+            else if (EDGES.indexOf(list[i]) < 0) return fail("Aura: unknown edge '" + list[i] + "'. Use top, bottom, left, right or all.");
+            else if (out.indexOf(list[i]) < 0) out.push(list[i]);
+          }
+          page = out;
+          log('edge swipes deferred on', out.join(', ') || 'no edge');
+          return state();
+        },
+        allow: function () { page = []; log('edge swipes: one swipe runs the iOS gesture'); return state(); },
+        reset: function () { page = null; return state(); },
+        get: state,
+      };
+    })(),
     glass: {
       set: function (o) {
         o = o || {};

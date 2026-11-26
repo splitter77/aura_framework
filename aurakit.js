@@ -10,6 +10,7 @@
  *   AuraKit.flic          Flic 2 buttons: pairing, gestures, per-button actions, data-flic elements
  *   AuraKit.statusBar     show or hide the iOS status bar at any time
  *   AuraKit.orientation   lock the screen rotation
+ *   AuraKit.systemGestures  edge swipes: the first one goes to the page, not to iOS
  *   AuraKit.volumeButtons the volume buttons as triggers
  *   AuraKit.keyboard      bar above the keyboard, text formatting, input bar glued to the keyboard
  *   AuraKit.experimental.glass   EXPERIMENTAL native Liquid Glass buttons over HTML elements
@@ -67,6 +68,7 @@
   // Native functions an iframe may call through its parent page. The peer link goes through AuraKit.link() instead.
   var FRAME_CALLS = ['capabilities', 'deviceInfo', 'haptic', 'prepareHaptics', 'proximity.start', 'proximity.stop',
     'statusBar.set', 'statusBar.get', 'orientation.lock', 'orientation.unlock', 'orientation.get',
+    'systemGestures.defer', 'systemGestures.allow', 'systemGestures.reset', 'systemGestures.get',
     'volumeButtons.start', 'volumeButtons.stop', 'contact.add',
     'bluetooth.state', 'bluetooth.requestDevice', 'bluetooth.scan', 'bluetooth.stopScan', 'bluetooth.connect',
     'bluetooth.disconnect', 'bluetooth.read', 'bluetooth.write', 'bluetooth.startNotifications', 'bluetooth.stopNotifications',
@@ -563,6 +565,22 @@
     },
     unlock: async function () { await requireCap('orientationLock', 'AuraKit.orientation'); return orientation._apply(await call('orientation.unlock')); },
     get: async function () { await requireCap('orientationLock', 'AuraKit.orientation'); return orientation._apply(await call('orientation.get')); },
+  };
+
+  var systemGestures = {
+    /** Last known deferred edges (null until the first call). */
+    deferred: null,
+    _apply: function (s) { if (s) systemGestures.deferred = s.deferred || []; return s; },
+    /** edges: 'all' (default) or some of 'top', 'bottom', 'left', 'right'. Resolves to { deferred, default }. */
+    defer: async function (edges) {
+      await requireCap('systemGestures', 'AuraKit.systemGestures');
+      return systemGestures._apply(await call('systemGestures.defer', edges === undefined ? 'all' : edges));
+    },
+    /** One swipe runs the iOS gesture again on every edge. */
+    allow: async function () { await requireCap('systemGestures', 'AuraKit.systemGestures'); return systemGestures._apply(await call('systemGestures.allow')); },
+    /** Back to the default: every edge in the App Clip, none in Aura Browser. */
+    reset: async function () { await requireCap('systemGestures', 'AuraKit.systemGestures'); return systemGestures._apply(await call('systemGestures.reset')); },
+    get: async function () { await requireCap('systemGestures', 'AuraKit.systemGestures'); return systemGestures._apply(await call('systemGestures.get')); },
   };
 
   var volumeWatchers = new Set();
@@ -1833,6 +1851,7 @@
     proximity: proximity,
     statusBar: statusBar,
     orientation: orientation,
+    systemGestures: systemGestures,
     volumeButtons: volumeButtons,
     keyboard: keyboard,
     /** Features that may change or not work everywhere yet. */
